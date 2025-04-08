@@ -11,7 +11,7 @@ const userRoutes = require('./routes/user.routes');
 const app = express();
 
 app.use(cors({
-  origin: 'http://localhost:5173', 
+  origin: '*', 
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true 
 }));
