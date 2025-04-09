@@ -1,3 +1,4 @@
+const profile = require("../models/profile");
 const Profile = require("../models/profile");
 const UserModel = require("../models/user");
 
@@ -24,13 +25,14 @@ const getProfileByRegistrationNo = async (req, res) => {
   }
 };
 
+
 const updateProfile = async (req, res) => {
   try {
     const { registration_no } = req.params;
     const profile = await Profile.findOneAndUpdate(
-      { registration_no }, 
-      { $set: req.body },   
-      { new: true } 
+      {registration_no },
+      { $set: req.body },
+      { new: true }
     );
 
     if (!profile) {
@@ -39,15 +41,30 @@ const updateProfile = async (req, res) => {
         message: "Profile not found with the given registration number",
       });
     }
+
+    const userUpdate = await UserModel.findOneAndUpdate(
+      {  ref_no:registration_no },
+      { $set: req.body },
+      { new: true }
+    );
+
+    if (!userUpdate) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found with the given registration number",
+      });
+    }
+
     res.status(200).json({
       success: true,
-      data: profile,
-      message:"Profile Updated Successfully."
+      data: { profile, user: userUpdate },
+      message: "Profile Updated Successfully.",
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 const getAllUserProfile = async (req, res) => {
   try {
@@ -58,4 +75,14 @@ const getAllUserProfile = async (req, res) => {
   }
 };
 
-module.exports = { getProfileByRegistrationNo,updateProfile, getAllUserProfile };
+const getAllUserDetails = async(req,res)=>{
+  try {
+    const users = await Profile.find();
+    res.status(200).json({ success: true, users });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+
+module.exports = { getProfileByRegistrationNo,updateProfile, getAllUserProfile,getAllUserDetails };
