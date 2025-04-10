@@ -66,23 +66,47 @@ const updateProfile = async (req, res) => {
 };
 
 
-const getAllUserProfile = async (req, res) => {
+
+const getAllUserDetails = async (req, res) => {
   try {
-    const users = await UserModel.find();
-    res.status(200).json({ success: true, users });
+    const userDetails = await UserModel.aggregate([
+      {
+        $lookup: {
+          from: "registration_tbl",
+          localField: "ref_no",
+          foreignField: "registration_no",
+          as: "profile"
+        }
+      },
+      {
+        $unwind: {
+          path: "$profile",
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [
+              "$$ROOT",              
+              "$profile",            
+              { profile: "$profile" }
+            ]
+          }
+        }
+      },
+      {
+        $project: {
+          profile: 0 
+        }
+      }
+    ]);
+    
+    res.status(200).json({ success: true, users: userDetails });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-const getAllUserDetails = async(req,res)=>{
-  try {
-    const users = await Profile.find();
-    res.status(200).json({ success: true, users });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-}
 
-
-module.exports = { getProfileByRegistrationNo,updateProfile, getAllUserProfile,getAllUserDetails };
+module.exports = { getProfileByRegistrationNo,updateProfile,getAllUserDetails };
