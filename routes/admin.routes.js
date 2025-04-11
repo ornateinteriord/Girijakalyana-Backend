@@ -4,6 +4,7 @@ const { getAllUserProfile, getAllUserDetails, updateProfile } = require('../cont
 const authenticateToken = require('../middleware/auth.middleware');
 const checkRole = require('../middleware/roles.middleware');
 const { getPromotersTransactions, getPromoters, getPromotersEarnings } = require('../controllers/promoters/PromotersController');
+const getAllAssistanceTransactions = require('../controllers/Transactions/TransactionController');
 
 
 
@@ -14,5 +15,6 @@ router.put('/reset-password/:registration_no',authenticateToken,checkRole("Admin
 router.get('/all-promoters',authenticateToken,checkRole("Admin"),getPromoters)
 router.get('/all-promoters-earnings',authenticateToken,checkRole("Admin"),getPromotersEarnings)
 router.get('/all-promoters-transactions',authenticateToken,checkRole("Admin"),getPromotersTransactions)
+router.get('/all-Assistance-transactions',authenticateToken,checkRole("Admin"),getAllAssistanceTransactions)
 
 module.exports = router;
