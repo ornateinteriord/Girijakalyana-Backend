@@ -32,7 +32,9 @@ app.use('/api/user', userRoutes);
 
 
 
-
+app.get('/',(req,res) => {
+  res.send('Welcome to Girija-Kalyana Backend')
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
