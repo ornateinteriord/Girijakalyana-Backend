@@ -14,5 +14,6 @@ router.post("/interest", authenticateToken, interestController.expressInterest);
 router.get("/interest/status/:senderRegistrationNo/:recipientRegistrationNo", authenticateToken, interestController.getInterestStatus);
 router.put("/interest/:registration_no", authenticateToken, interestController.updateInterestStatus);
 router.get("/interest/received/:recipientRegistrationNo", authenticateToken, interestController.getReceivedInterests);
+router.get("/interest/accepted/:recipientRegistrationNo", authenticateToken, interestController.getAcceptedInterests);
 
 module.exports = router;
