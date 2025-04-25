@@ -134,6 +134,26 @@ const updateInterestStatus = asyncHandler(async (req, res) => {
 
   res.status(200).json({ success: true, data: interest });
 });
+// @desc    Get all accepted interests for a user
+// @route   GET /api/user/interest/accepted/:recipientRegistrationNo
+const getAcceptedInterests = asyncHandler(async (req, res) => {
+  const { recipientRegistrationNo } = req.params;
+
+  if (!recipientRegistrationNo) {
+    return res.status(400).json({ message: "Recipient registration number is required" });
+  }
+
+  const acceptedInterests = await Interest.find({
+    recipientRegistrationNo,
+    status: "accepted"
+  }).populate({
+    path: "sender",
+    select: "first_name last_name  profileImg age height address registration_no"
+  });
+
+  res.status(200).json(acceptedInterests);
+});
+
 
 
 
@@ -141,5 +161,6 @@ module.exports = {
   expressInterest,
   getInterestStatus,
   updateInterestStatus,
-  getReceivedInterests
+  getReceivedInterests,
+  getAcceptedInterests,
 };

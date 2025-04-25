@@ -9,8 +9,20 @@ const interestSchema = new mongoose.Schema({
   recipient: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Profile', 
-    required: true 
   },
+  first_name:{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Profile',
+
+  },
+ last_name:{
+  type: mongoose.Schema.Types.ObjectId,
+  ref:'Profile', 
+ },
+ age:{
+  type: mongoose.Schema.Types.ObjectId,
+  ref:'Profile', 
+ },
   senderRegistrationNo: { 
     type: String, 
     required: true 
