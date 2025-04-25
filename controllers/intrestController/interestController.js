@@ -148,7 +148,7 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
     status: "accepted"
   }).populate({
     path: "sender",
-    select: "firstName lastName profileImg age height address registration_no"
+    select: "first_name last_name  profileImg age height address registration_no"
   });
 
   res.status(200).json(acceptedInterests);
