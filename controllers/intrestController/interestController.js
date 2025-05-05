@@ -70,8 +70,28 @@ const getReceivedInterests = asyncHandler(async (req, res) => {
 });
 
 
-// @desc    Get interest status
-// @route   GET /api/user/status/:senderRegistrationNo/:recipientRegistrationNo
+
+const getSentInterests = asyncHandler(async (req, res) => {
+  const { senderRegistrationNo } = req.params;
+
+  if (!senderRegistrationNo) {
+    res.status(400);
+    throw new Error('Sender registration number is required');
+  }
+
+  const interests = await Interest.find({ 
+    senderRegistrationNo,
+    status:"pending" 
+  }).populate('recipient', 'first_name last_name profilePhoto age height occupation');
+  
+  const totalCount = interests.length;
+  res.status(200).json({
+    data: interests,
+    totalCount: totalCount,
+    totalPages: 1, // You can implement pagination later if needed
+  });
+});
+
 const getInterestStatus = asyncHandler(async (req, res) => {
   const { senderRegistrationNo, recipientRegistrationNo } = req.params;
 
@@ -127,15 +147,15 @@ const updateInterestStatus = asyncHandler(async (req, res) => {
     },
     { new: true }
   );
-// console.log("234567:",interest)
+
   if (!interest) {
     return res.status(404).json({ message: "Interest not found" });
   }
 
   res.status(200).json({ success: true, data: interest });
 });
-// @desc    Get all accepted interests for a user
-// @route   GET /api/user/interest/accepted/:recipientRegistrationNo
+
+
 const getAcceptedInterests = asyncHandler(async (req, res) => {
   const { recipientRegistrationNo } = req.params;
 
@@ -151,7 +171,7 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
     select: "first_name last_name  profileImg age height address registration_no"
   });
 
-  res.status(200).json(acceptedInterests);
+  res.status(200).json(acceptedInterests,);
 });
 
 
@@ -159,6 +179,7 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
 
 module.exports = {
   expressInterest,
+  getSentInterests,
   getInterestStatus,
   updateInterestStatus,
   getReceivedInterests,
