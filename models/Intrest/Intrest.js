@@ -34,7 +34,7 @@ const interestSchema = new mongoose.Schema({
   status: { 
     type: String, 
     enum: ['pending', 'accepted', 'rejected', 'withdrawn'], 
-    default: 'pending' 
+    default: 'none' 
   },
   message: {
     type: String,
