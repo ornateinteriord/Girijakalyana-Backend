@@ -87,18 +87,24 @@ const getInterestStatus = asyncHandler(async (req, res) => {
     ]
   }).populate('sender recipient'); // ✅ Corrected field names
 
+ 
+
   if (!interest) {
     return res.status(200).json({ status: "none" });
+   
   }
-
+ 
   res.status(200).json({
+  data:{
     status: interest.status,
     interestId: interest._id,
     message: interest.message,
     senderProfile: interest.sender, // ✅ now refers to the populated Profile
     recipientProfile: interest.recipient,
     isSender: interest.senderRegistrationNo === senderRegistrationNo
+  }
   });
+  
 });
 
 
