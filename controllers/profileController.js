@@ -29,9 +29,10 @@ const getProfileByRegistrationNo = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { registration_no } = req.params;
+    const { _id, ...others } = req.body;
     const profile = await Profile.findOneAndUpdate(
       {registration_no },
-      { $set: req.body },
+      { $set: others },
       { new: true }
     );
 
@@ -44,7 +45,7 @@ const updateProfile = async (req, res) => {
 
     const userUpdate = await UserModel.findOneAndUpdate(
       {  ref_no:registration_no },
-      { $set: req.body },
+      { $set: others },
       { new: true }
     );
 

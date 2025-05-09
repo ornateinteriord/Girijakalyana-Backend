@@ -6,7 +6,7 @@ const {expressInterest,getSentInterests,getInterestStatus,updateInterestStatus,g
 
 // Profile routes
 router.get('/profile/:registration_no', authenticateToken, getProfileByRegistrationNo);
-router.put('/update-profile/:registration_no', authenticateToken, updateProfile);
+router.put('/update-profile/:registration_no',  updateProfile);
 router.get('/all-users-profiles', authenticateToken, getAllUserDetails);
 
 // Interest routes (with authentication and consistent naming)
