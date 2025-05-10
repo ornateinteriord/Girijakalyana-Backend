@@ -1,5 +1,51 @@
 const jwt = require('jsonwebtoken');
 const UserModel = require('../../models/user');
+const profile = require('../../models/profile');
+
+const signUp = async(req,res)=>{
+  try {
+    const { username, password, ...otherDetails } = req.body;
+    const existingUser = await UserModel.findOne({ username });
+    if (existingUser) {
+      return res.status(409).json({ success: false, message: 'Username already exists' });
+    }
+
+    const lastUser = await UserModel.aggregate([
+      { $sort: { user_id: -1 } },
+      { $limit: 1 }
+    ]);
+    const newUserId = lastUser.length ? lastUser[0].user_id + 1 : 1;
+    const newRefNo = lastUser.length ? `SGM${String(parseInt(lastUser[0].ref_no.slice(3)) + 1).padStart(3, '0')}` : 'SGM001';
+
+    const newUser = new UserModel({
+      user_id: newUserId,
+      username,
+      password, 
+      ref_no: newRefNo,
+     ...otherDetails
+    });
+
+    await newUser.save();
+
+    const newProfile = new profile({
+      registration_no: newRefNo,
+      email_id: username,
+      type_of_user: newUser.user_role,
+      registration_date: new Date().toISOString(),
+      ...otherDetails // Include other profile details from request
+    });
+    await newProfile.save();
+
+    return res.status(201).json({
+      success: true,
+      user: newUser,
+      profile: newProfile,
+      message: 'Signup successful'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
 
 const login = async (req, res) => {
   try {
@@ -66,5 +112,6 @@ const login = async (req, res) => {
 
 
 module.exports = {
+  signUp,
   login
 };
