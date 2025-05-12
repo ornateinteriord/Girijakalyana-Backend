@@ -66,9 +66,10 @@ const updateProfile = async (req, res) => {
 };
 
 
-
 const getAllUserDetails = async (req, res) => {
   try {
+    const userRole = req.user.user_role;
+
     const userDetails = await UserModel.aggregate([
       {
         $lookup: {
@@ -96,8 +97,14 @@ const getAllUserDetails = async (req, res) => {
         }
       },
       {
+        $addFields: {
+          mobile_no: userRole === 'FreeUser' ? null : "$mobile_no",
+          email_id: userRole === 'FreeUser' ? null : "$email_id"
+        }
+      },
+      {
         $project: {
-          profile: 0 
+          profile: 0
         }
       }
     ]);
