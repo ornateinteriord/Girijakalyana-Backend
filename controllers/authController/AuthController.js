@@ -27,11 +27,14 @@ const signUp = async(req,res)=>{
 
     await newUser.save();
 
+    const currentDate = new Date();
+    const formattedDate = `${String(currentDate.getDate()).padStart(2, '0')}/${String(currentDate.getMonth() + 1).padStart(2, '0')}/${currentDate.getFullYear()}`;
+
     const newProfile = new profile({
       registration_no: newRefNo,
       email_id: username,
       type_of_user: newUser.user_role,
-      registration_date: new Date().toISOString(),
+      registration_date: formattedDate,
       ...otherDetails // Include other profile details from request
     });
     await newProfile.save();

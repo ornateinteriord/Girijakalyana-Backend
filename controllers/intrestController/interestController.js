@@ -204,9 +204,12 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
   const { recipientRegistrationNo } = req.params;
 
   if (!recipientRegistrationNo) {
-    return res.status(400).json({ message: "Recipient registration number is required" });
+    return res.status(400).json({ 
+      message: "Recipient registration number is required" 
+    });
   }
 
+  // Fetch accepted interests and populate ALL sender fields
   const acceptedInterests = await Interest.find({
     recipientRegistrationNo,
     status: "accepted"
@@ -215,7 +218,7 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
   
   );
 
-  res.status(200).json(acceptedInterests,);
+  res.status(200).json(acceptedInterests);
 });
 
 
