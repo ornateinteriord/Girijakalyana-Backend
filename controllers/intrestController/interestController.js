@@ -73,16 +73,19 @@ const getReceivedInterests = asyncHandler(async (req, res) => {
 
 const getSentInterests = asyncHandler(async (req, res) => {
   const { senderRegistrationNo } = req.params;
+  const senderRole = req.user.user_role
 
   if (!senderRegistrationNo) {
     res.status(400);
     throw new Error('Sender registration number is required');
   }
 
+  const excludeFields = senderRole === 'FreeUser' ? '-mobile_no -email_id' : '';
+
   const interests = await Interest.find({ 
     senderRegistrationNo,
     status:"pending" 
-  }).populate('recipient');
+  }).populate('recipient',excludeFields);
   
   const totalCount = interests.length;
   res.status(200).json({
@@ -202,6 +205,7 @@ const updateInterestStatus = asyncHandler(async (req, res) => {
 
 const getAcceptedInterests = asyncHandler(async (req, res) => {
   const { recipientRegistrationNo } = req.params;
+  const recipientRole = req.user.user_role
 
   if (!recipientRegistrationNo) {
     return res.status(400).json({ 
@@ -209,15 +213,15 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
     });
   }
 
-  // Fetch accepted interests and populate ALL sender fields
+  const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
+
   const acceptedInterests = await Interest.find({
     recipientRegistrationNo,
     status: "accepted"
   }).populate(
      "sender",
-  
+     excludeFields
   );
-
   res.status(200).json(acceptedInterests);
 });
 
