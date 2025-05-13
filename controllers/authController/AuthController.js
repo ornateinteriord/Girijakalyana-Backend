@@ -111,10 +111,68 @@ const login = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+const recoverPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await MemberModel.findOne({ email });
+    if (!user) {
+      return res
+      .status(404)
+      .json({ success: false, message: "Email not registered" });
+    }
+    const recoveryDescription = `Dear Member,\n\nYou requested a password recovery. Here is your password:\n ${user.password}\n\nPlease keep this information secure.\n\nBest regards,\nBICCSL Team`;
+
+    await sendMail(user.email, recoverySubject, recoveryDescription);
+    res.json({ success: true, message: "Password sent to your email" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    const { email, password, otp } = req.body;
+    const user = await MemberModel.findOne({ email });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Email not registered" });
+    }
+
+    if (otp && !password) {
+      if (!verifyOTP(email, otp)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid OTP or expired" });
+      }
+      return res.json({ success: true, message: "OTP verified. Now set a new password." });
+    }
+    if (password) {
+    
+      user.password = password;
+      await user.save();
+
+      return res.json({
+        success: true,
+        message: "Password reset successfully",
+      });
+    }
+    const newOtp = generateOTP();
+    const resetPasswordDescription = `Dear Member,\n\nYour OTP for password reset is: ${newOtp}\n\nPlease use this OTP to proceed with resetting your password.\n\nPlease keep don't share with anyone.\n\nBest regards,\nBICCSL Team`;
+    storeOTP(email, newOtp);
+    await sendMail(email, resetPasswordSubject , resetPasswordDescription);
+    return res.json({ success: true, message: "OTP sent to your email" });
+  } catch (error) {
+    console.error("Error in resetPassword:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 
 
 module.exports = {
   signUp,
-  login
+  login,
+  recoverPassword,
+  resetPassword
 };
