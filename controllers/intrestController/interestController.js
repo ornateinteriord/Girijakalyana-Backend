@@ -82,7 +82,7 @@ const getSentInterests = asyncHandler(async (req, res) => {
   const interests = await Interest.find({ 
     senderRegistrationNo,
     status:"pending" 
-  }).populate('recipient', 'first_name last_name profilePhoto age height occupation');
+  }).populate('recipient');
   
   const totalCount = interests.length;
   res.status(200).json({
@@ -91,6 +91,44 @@ const getSentInterests = asyncHandler(async (req, res) => {
     totalPages: 1, // You can implement pagination later if needed
   });
 });
+
+const cancelInterestRequest = asyncHandler(async (req, res) => {
+  try {
+    const { senderRegistrationNo, recipientRegistrationNo } = req.body;
+
+    // Validate required fields
+    if (!senderRegistrationNo || !recipientRegistrationNo) {
+      res.status(400);
+      throw new Error("Both sender and recipient registration numbers are required");
+    }
+
+    // Find and delete the pending interest request
+    const deletedRequest = await Interest.findOneAndDelete({
+      senderRegistrationNo,
+      recipientRegistrationNo,
+      status: 'pending' // Only allow deletion of pending requests
+    });
+
+    if (!deletedRequest) {
+      res.status(404);
+      throw new Error("Interest request not found, already processed, or you don't have permission to cancel it");
+    }
+
+    res.status(200).json({ 
+      success: true,
+      message: "Interest request successfully cancelled",
+      data: {
+        senderRegistrationNo: deletedRequest.senderRegistrationNo,
+        recipientRegistrationNo: deletedRequest.recipientRegistrationNo,
+        deletedAt: new Date()
+      }
+    });
+
+  } catch (error) {
+     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 
 const getInterestStatus = asyncHandler(async (req, res) => {
   const { senderRegistrationNo, recipientRegistrationNo } = req.params;
@@ -172,10 +210,10 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
   const acceptedInterests = await Interest.find({
     recipientRegistrationNo,
     status: "accepted"
-  }).populate({
-    path: "sender",
-    select: "first_name last_name  profileImg age height address registration_no"
-  });
+  }).populate(
+     "sender",
+  
+  );
 
   res.status(200).json(acceptedInterests,);
 });
@@ -190,4 +228,5 @@ module.exports = {
   updateInterestStatus,
   getReceivedInterests,
   getAcceptedInterests,
+  cancelInterestRequest
 };
