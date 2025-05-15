@@ -2,6 +2,7 @@ const profile = require("../models/profile");
 const Profile = require("../models/profile");
 const UserModel = require("../models/user");
 
+
 // Get profile by registration number
 const getProfileByRegistrationNo = async (req, res) => {
   try {
@@ -117,4 +118,44 @@ const getAllUserDetails = async (req, res) => {
 };
 
 
-module.exports = { getProfileByRegistrationNo,updateProfile,getAllUserDetails };
+// Change password controller
+const changePassword = async (req, res) => {
+  try {
+    const { registration_no } = req.params;
+    const { oldPassword, newPassword } = req.body;
+
+    const user = await UserModel.findOne({ ref_no: registration_no });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    // Plain text comparison
+    if (user.password !== oldPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Old password is incorrect.",
+      });
+    }
+
+    // Save new password directly
+    user.password = newPassword;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully.",
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
+module.exports = { getProfileByRegistrationNo,
+                  updateProfile,
+                  getAllUserDetails,
+                changePassword };

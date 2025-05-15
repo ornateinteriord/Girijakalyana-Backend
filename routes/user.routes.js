@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getProfileByRegistrationNo, updateProfile, getAllUserDetails } = require('../controllers/profileController');
+const { getProfileByRegistrationNo, updateProfile, getAllUserDetails, changePassword } = require('../controllers/profileController');
 const authenticateToken = require('../middleware/auth.middleware');
 const {expressInterest,getSentInterests,getInterestStatus,updateInterestStatus,getReceivedInterests,getAcceptedInterests, cancelInterestRequest} = require('../controllers/intrestController/interestController');
 
@@ -18,5 +18,6 @@ router.get("/interest/status/:senderRegistrationNo/:recipientRegistrationNo", au
 router.put("/interest/:registration_no", authenticateToken, updateInterestStatus);
 router.get("/interest/received/:recipientRegistrationNo", authenticateToken, getReceivedInterests);
 router.get("/interest/accepted/:recipientRegistrationNo", authenticateToken, getAcceptedInterests);
+router.post("/change-password/:registration_no",authenticateToken, changePassword);
 
 module.exports = router;
