@@ -1,6 +1,13 @@
 const jwt = require('jsonwebtoken');
 const UserModel = require('../../models/user');
 const profile = require('../../models/profile');
+const { sendMail } = require('../../utils/EmailService');
+const { generateOTP, storeOTP, verifyOTP } = require('../../utils/OtpService');
+
+
+const signUpSubject = "Welcome to GirijaKalyana - Your Login Credentials";
+const recoverySubject = "GirijaKalyana - Password Recovery";
+const resetPasswordSubject =  "GirijaKalyana - OTP Verification";
 
 const signUp = async(req,res)=>{
   try {
@@ -114,7 +121,7 @@ const login = async (req, res) => {
 const recoverPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    const user = await MemberModel.findOne({ email });
+    const user = await UserModel.findOne({ username:email });
     if (!user) {
       return res
       .status(404)
@@ -122,7 +129,7 @@ const recoverPassword = async (req, res) => {
     }
     const recoveryDescription = `Dear Member,\n\nYou requested a password recovery. Here is your password:\n ${user.password}\n\nPlease keep this information secure.\n\nBest regards,\nBICCSL Team`;
 
-    await sendMail(user.email, recoverySubject, recoveryDescription);
+     await sendMail(user.username, recoverySubject, recoveryDescription);
     res.json({ success: true, message: "Password sent to your email" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -132,7 +139,7 @@ const recoverPassword = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { email, password, otp } = req.body;
-    const user = await MemberModel.findOne({ email });
+    const user = await UserModel.findOne({ username:email });
     if (!user) {
       return res
         .status(404)
@@ -145,7 +152,7 @@ const resetPassword = async (req, res) => {
           .status(400)
           .json({ success: false, message: "Invalid OTP or expired" });
       }
-      return res.json({ success: true, message: "OTP verified. Now set a new password." });
+      return res.json({ success: true, message: "New password reset successfully!" });
     }
     if (password) {
     
@@ -158,9 +165,9 @@ const resetPassword = async (req, res) => {
       });
     }
     const newOtp = generateOTP();
-    const resetPasswordDescription = `Dear Member,\n\nYour OTP for password reset is: ${newOtp}\n\nPlease use this OTP to proceed with resetting your password.\n\nPlease keep don't share with anyone.\n\nBest regards,\nBICCSL Team`;
+    const resetPasswordDescription = `Dear Member,\n\nYour OTP for password reset is: ${newOtp}\n\nPlease use this OTP to proceed with resetting your password.\n\nPlease keep don't share with anyone.\n\nBest regards,\n Team`;
     storeOTP(email, newOtp);
-    await sendMail(email, resetPasswordSubject , resetPasswordDescription);
+    await sendMail(user.username, recoverySubject, resetPasswordDescription);
     return res.json({ success: true, message: "OTP sent to your email" });
   } catch (error) {
     console.error("Error in resetPassword:", error);
