@@ -1,7 +1,7 @@
 const profile = require("../models/profile");
 const Profile = require("../models/profile");
 const UserModel = require("../models/user");
-const bcrypt = require("bcryptjs");
+
 
 // Get profile by registration number
 const getProfileByRegistrationNo = async (req, res) => {
