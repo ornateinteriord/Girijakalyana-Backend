@@ -1,4 +1,5 @@
 const AssistanceTransactionModel = require("../../models/Transactions/AssistanceTransaction");
+const TransactionModel = require("../../models/Transactions/OnlineTransaction");
 
 const getAllAssistanceTransactions = async (req, res) => {
     try {
@@ -36,5 +37,23 @@ const getAllAssistanceTransactions = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+const getOnlineAllTransactions = async (req, res) => {
+  try {
+    const transactions = await TransactionModel.find();
+   
+    res.status(200).json({
+      success: true,
+      data: transactions,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch transactions",
+      error: error.message,
+    });
+  }
+};
 
-module.exports = getAllAssistanceTransactions;
+module.exports ={getAllAssistanceTransactions,
+    getOnlineAllTransactions
+} ;

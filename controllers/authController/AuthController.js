@@ -5,6 +5,7 @@ const { sendMail } = require('../../utils/EmailService');
 const { generateOTP, storeOTP, verifyOTP } = require('../../utils/OtpService');
 
 
+
 const signUpSubject = "Welcome to GirijaKalyana - Your Login Credentials";
 const recoverySubject = "GirijaKalyana - Password Recovery";
 const resetPasswordSubject =  "GirijaKalyana - OTP Verification";
@@ -177,9 +178,11 @@ const resetPassword = async (req, res) => {
 
 
 
+
 module.exports = {
   signUp,
   login,
   recoverPassword,
-  resetPassword
+  resetPassword,
+ 
 };
