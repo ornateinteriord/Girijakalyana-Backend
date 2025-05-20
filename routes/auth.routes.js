@@ -5,7 +5,6 @@ const { login, signUp, recoverPassword, resetPassword, loginMobile } = require('
 
 router.post('/signup', signUp);
 router.post('/login', login);
-router.post("/recover-password",recoverPassword)
 router.post("/reset-password",resetPassword)
 
 

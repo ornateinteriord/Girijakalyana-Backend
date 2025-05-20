@@ -6,9 +6,9 @@ const { generateOTP, storeOTP, verifyOTP } = require('../../utils/OtpService');
 
 
 
-const signUpSubject = "Welcome to GirijaKalyana - Your Login Credentials";
+
 const recoverySubject = "GirijaKalyana - Password Recovery";
-const resetPasswordSubject =  "GirijaKalyana - OTP Verification";
+
 
 const signUp = async(req,res)=>{
   try {
@@ -119,23 +119,7 @@ const login = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-const recoverPassword = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const user = await UserModel.findOne({ username:email });
-    if (!user) {
-      return res
-      .status(404)
-      .json({ success: false, message: "Email not registered" });
-    }
-    const recoveryDescription = `Dear Member,\n\nYou requested a password recovery. Here is your password:\n ${user.password}\n\nPlease keep this information secure.\n\nBest regards,\nBICCSL Team`;
 
-     await sendMail(user.username, recoverySubject, recoveryDescription);
-    res.json({ success: true, message: "Password sent to your email" });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-};
 
 const resetPassword = async (req, res) => {
   try {
@@ -182,7 +166,5 @@ const resetPassword = async (req, res) => {
 module.exports = {
   signUp,
   login,
-  recoverPassword,
   resetPassword,
- 
 };
