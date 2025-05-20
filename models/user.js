@@ -16,7 +16,7 @@ const UserSchema = new mongoose.Schema({
   counter: { type: Number, default: 0 },
   last_loggedin: { type: String }, 
   loggedin_from: { type: String },
-  mobile_no: { type: Number }
+  mobile_no: { type: String }
 }, { timestamps: true, collection: "user_tbl" });
 
 const UserModel = mongoose.model("user_tbl", UserSchema);

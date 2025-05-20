@@ -8,6 +8,7 @@ const {
   getAllAssistanceTransactions,
   getOnlineAllTransactions
 } = require('../controllers/Transactions/TransactionController');
+const { getAllNews, addNews } = require('../controllers/news/NewsController');
 
 
 
@@ -21,6 +22,8 @@ router.get('/all-promoters-earnings',authenticateToken,checkRole("Admin"),getPro
 router.get('/all-promoters-transactions',authenticateToken,checkRole("Admin"),getPromotersTransactions)
 router.get('/all-Assistance-transactions', authenticateToken, checkRole("Admin"), getAllAssistanceTransactions);
 router.get("/online-transactions", authenticateToken, checkRole("Admin"), getOnlineAllTransactions);
+router.get("/all-news",authenticateToken, checkRole("Admin"), getAllNews);
+router.post("/add-news",authenticateToken, checkRole("Admin"), addNews);
 
 
 module.exports = router;
