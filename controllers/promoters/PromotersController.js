@@ -27,5 +27,29 @@ const getPromotersTransactions = async(req,res)=>{
         res.status(500).json({ success: false, message: error.message });
       }
 }
+const updatePromoterStatus = async (req, res) => {
+  const { id } = req.params; 
+  const { status } = req.body; 
 
-module.exports = {getPromoters,getPromotersEarnings, getPromotersTransactions };
+  try {
+    const updatedPromoter = await PromotersModel.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+
+    if (!updatedPromoter) {
+      return res.status(404).json({ success: false, message: "Promoter not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Status updated to ${status}`,
+      promoter: updatedPromoter,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = {getPromoters,getPromotersEarnings, getPromotersTransactions,updatePromoterStatus };

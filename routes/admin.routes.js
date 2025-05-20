@@ -3,7 +3,7 @@ const router = express.Router();
 const { getAllUserProfile, getAllUserDetails, updateProfile } = require('../controllers/profileController');
 const authenticateToken = require('../middleware/auth.middleware');
 const checkRole = require('../middleware/roles.middleware');
-const { getPromotersTransactions, getPromoters, getPromotersEarnings } = require('../controllers/promoters/PromotersController');
+const { getPromotersTransactions, getPromoters, getPromotersEarnings, updatePromoterStatus } = require('../controllers/promoters/PromotersController');
 const {
   getAllAssistanceTransactions,
   getOnlineAllTransactions
@@ -21,6 +21,7 @@ router.get('/all-promoters-earnings',authenticateToken,checkRole("Admin"),getPro
 router.get('/all-promoters-transactions',authenticateToken,checkRole("Admin"),getPromotersTransactions)
 router.get('/all-Assistance-transactions', authenticateToken, checkRole("Admin"), getAllAssistanceTransactions);
 router.get("/online-transactions", authenticateToken, checkRole("Admin"), getOnlineAllTransactions);
+router.put("/promoters/:id/status",authenticateToken,checkRole("Admin"),updatePromoterStatus);
 
 
 module.exports = router;
