@@ -47,7 +47,7 @@ const PromoterDetailsSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    default: "active",
+    default: "pending",
   },
   KEY: {
     type: String,
