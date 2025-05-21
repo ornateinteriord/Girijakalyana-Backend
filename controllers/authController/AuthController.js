@@ -3,6 +3,7 @@ const UserModel = require('../../models/user');
 const profile = require('../../models/profile');
 const { sendMail } = require('../../utils/EmailService');
 const { generateOTP, storeOTP, verifyOTP } = require('../../utils/OtpService');
+const { FormatDate } = require('../../utils/DateFormate');
 
 
 
@@ -36,7 +37,7 @@ const signUp = async(req,res)=>{
     await newUser.save();
 
     const currentDate = new Date();
-    const formattedDate = `${String(currentDate.getDate()).padStart(2, '0')}/${String(currentDate.getMonth() + 1).padStart(2, '0')}/${currentDate.getFullYear()}`;
+    const formattedDate = FormatDate(currentDate)
 
     const newProfile = new profile({
       registration_no: newRefNo,
