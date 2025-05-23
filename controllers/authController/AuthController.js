@@ -67,7 +67,7 @@ const login = async (req, res) => {
     const user = await UserModel.findOne({ username });
 
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(400).json({ 
         success: false, 
         message: 'Invalid username or password' 
       });
@@ -75,7 +75,7 @@ const login = async (req, res) => {
 
     // Compare passwords (in real apps, use bcrypt.compare)
     if (user.password !== password) {
-      return res.status(401).json({ 
+      return res.status(400).json({ 
         success: false, 
         message: 'Invalid username or password' 
       });
@@ -83,7 +83,7 @@ const login = async (req, res) => {
 
     // Check account status
     if (user.status !== 'active') {
-      return res.status(403).json({ 
+      return res.status(400).json({ 
         success: false, 
         message: `Account is ${user.status}. Please contact support.`,
         status: user.status,

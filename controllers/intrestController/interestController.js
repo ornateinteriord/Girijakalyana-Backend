@@ -1,32 +1,33 @@
 const asyncHandler = require("express-async-handler");
 const Interest = require("../../models/Intrest/Intrest");
 const Profile = require("../../models/profile");
+const profile = require("../../models/profile");
 
 // @desc    Express interest
 // @route   POST /api/user/express
 const expressInterest = asyncHandler(async (req, res) => {
-  const { senderRegistrationNo, recipientRegistrationNo, message } = req.body;
+  const { sender, recipient, message } = req.body;
 
   // Validate required fields
-  if (!senderRegistrationNo || !recipientRegistrationNo) {
+  if (!sender || !recipient) {
     return res.status(400).json({ message: "Sender and recipient are required" });
   }
 
   // Find sender and recipient profiles
-  const [sender, recipient] = await Promise.all([
-    Profile.findOne({ registration_no: senderRegistrationNo }),
-    Profile.findOne({ registration_no: recipientRegistrationNo })
+  const [senderuser, recipientuser] = await Promise.all([
+    Profile.findOne({ registration_no: sender }),
+    Profile.findOne({ registration_no: recipient })
   ]);
 
-  if (!sender || !recipient) {
+  if (!senderuser || !recipientuser) {
     return res.status(404).json({ message: "Profiles not found" });
   }
 
   // Check for existing interest
   const existingInterest = await Interest.findOne({
     $or: [
-      { sender: sender._id, recipient: recipient._id },
-      { senderRegistrationNo, recipientRegistrationNo }
+      { senderuser: senderuser._id, recipientuser: recipient._id },
+      { sender, recipient }
     ]
   });
 
@@ -39,10 +40,10 @@ const expressInterest = asyncHandler(async (req, res) => {
 
   // Create new interest
   const interest = await Interest.create({
-    sender: sender._id,
-    recipient: recipient._id,
-    senderRegistrationNo,
-    recipientRegistrationNo,
+    senderuser: senderuser._id,
+    recipientuser: recipientuser._id,
+    sender,
+    recipient,
     message,
     status: 'pending'
   });
@@ -52,14 +53,14 @@ const expressInterest = asyncHandler(async (req, res) => {
 
 
 const getReceivedInterests = asyncHandler(async (req, res) => {
-  const { recipientRegistrationNo } = req.params;
+  const { recipient } = req.params;
 
-  if (!recipientRegistrationNo) {
+  if (!recipient) {
     return res.status(400).json({ message: "Recipient registration number is required" });
   }
 
   const interests = await Interest.find({
-    recipientRegistrationNo,
+    recipient,
     status: 'pending'
   }).populate({
     path: 'sender',
@@ -72,43 +73,54 @@ const getReceivedInterests = asyncHandler(async (req, res) => {
 
 
 const getSentInterests = asyncHandler(async (req, res) => {
-  const { senderRegistrationNo } = req.params;
-  const senderRole = req.user.user_role
+  const { sender } = req.params;
+  const senderRole = req.user.user_role;
 
-  if (!senderRegistrationNo) {
+  if (!sender) {
     res.status(400);
     throw new Error('Sender registration number is required');
   }
 
   const excludeFields = senderRole === 'FreeUser' ? '-mobile_no -email_id' : '';
+  const allProfiles = await Profile.find().select(excludeFields);
 
   const interests = await Interest.find({ 
-    senderRegistrationNo,
-    status:"pending" 
-  }).populate('recipient',excludeFields);
-  
-  const totalCount = interests.length;
+    sender,
+    status: "pending" 
+  });
+
+  const populatedInterests = interests.map(interest => {
+    const recipientProfile = allProfiles.find(profile => 
+      profile.registration_no === interest.recipient
+    );
+
+    return {
+      ...interest.toObject(), 
+      recipientdata: recipientProfile || null 
+    };
+  });
+
   res.status(200).json({
-    data: interests,
-    totalCount: totalCount,
-    totalPages: 1, // You can implement pagination later if needed
+    data: populatedInterests,
+    totalCount: populatedInterests.length,
+    totalPages: 1,
   });
 });
 
 const cancelInterestRequest = asyncHandler(async (req, res) => {
   try {
-    const { senderRegistrationNo, recipientRegistrationNo } = req.body;
+    const { sender, recipient } = req.body;
 
     // Validate required fields
-    if (!senderRegistrationNo || !recipientRegistrationNo) {
+    if (!sender || !recipient) {
       res.status(400);
       throw new Error("Both sender and recipient registration numbers are required");
     }
 
     // Find and delete the pending interest request
     const deletedRequest = await Interest.findOneAndDelete({
-      senderRegistrationNo,
-      recipientRegistrationNo,
+      sender,
+      recipient,
       status: 'pending' // Only allow deletion of pending requests
     });
 
@@ -121,8 +133,8 @@ const cancelInterestRequest = asyncHandler(async (req, res) => {
       success: true,
       message: "Interest request successfully cancelled",
       data: {
-        senderRegistrationNo: deletedRequest.senderRegistrationNo,
-        recipientRegistrationNo: deletedRequest.recipientRegistrationNo,
+        sender: deletedRequest.sender,
+        recipient: deletedRequest.recipient,
         deletedAt: new Date()
       }
     });
@@ -134,17 +146,17 @@ const cancelInterestRequest = asyncHandler(async (req, res) => {
 
 
 const getInterestStatus = asyncHandler(async (req, res) => {
-  const { senderRegistrationNo, recipientRegistrationNo } = req.params;
+  const { sender, recipient } = req.params;
 
-  if (!senderRegistrationNo || !recipientRegistrationNo) {
+  if (!sender || !recipient) {
     res.status(400);
     throw new Error("Both registration numbers are required");
   }
 
   const interest = await Interest.findOne({
     $or: [
-      { senderRegistrationNo, recipientRegistrationNo },
-      { senderRegistrationNo: recipientRegistrationNo, recipientRegistrationNo: senderRegistrationNo }
+      { sender, recipient },
+      { sender: recipient, recipient: sender }
     ]
   }).populate('sender recipient'); // ✅ Corrected field names
 
@@ -162,7 +174,7 @@ const getInterestStatus = asyncHandler(async (req, res) => {
     message: interest.message,
     senderProfile: interest.sender, // ✅ now refers to the populated Profile
     recipientProfile: interest.recipient,
-    isSender: interest.senderRegistrationNo === senderRegistrationNo
+    isSender: interest.sender === sender
   }
   });
   
@@ -172,10 +184,10 @@ const getInterestStatus = asyncHandler(async (req, res) => {
 // @desc    Update interest status
 // @route   PUT /api/user/interest/:id
 const updateInterestStatus = asyncHandler(async (req, res) => {
-  const { registration_no } = req.params; // This is senderRegistrationNo
-  const { recipientRegistrationNo, status } = req.body;
+  const { registration_no } = req.params; // This is sender
+  const { recipient, status } = req.body;
 
-  if (!registration_no || !recipientRegistrationNo || !status) {
+  if (!registration_no || !recipient || !status) {
     return res.status(400).json({ message: "Missing required fields" });
   }
 
@@ -185,8 +197,8 @@ const updateInterestStatus = asyncHandler(async (req, res) => {
 
   const interest = await Interest.findOneAndUpdate(
     {
-      senderRegistrationNo: registration_no,
-      recipientRegistrationNo,
+      sender: registration_no,
+      recipient,
     },
     {
       status,
@@ -204,10 +216,10 @@ const updateInterestStatus = asyncHandler(async (req, res) => {
 
 
 const getAcceptedInterests = asyncHandler(async (req, res) => {
-  const { recipientRegistrationNo } = req.params;
-  const recipientRole = req.user.user_role
+  const { recipient } = req.params;
+  const recipientRole = req.user.user_role;
 
-  if (!recipientRegistrationNo) {
+  if (!recipient) {
     return res.status(400).json({ 
       message: "Recipient registration number is required" 
     });
@@ -215,14 +227,25 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
 
   const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
 
+  const allProfiles = await Profile.find().select(excludeFields);
+
   const acceptedInterests = await Interest.find({
-    recipientRegistrationNo,
+    recipient,
     status: "accepted"
-  }).populate(
-     "sender",
-     excludeFields
-  );
-  res.status(200).json(acceptedInterests);
+  });
+
+  const populatedInterests = acceptedInterests.map(interest => {
+    const senderProfile = allProfiles.find(profile => 
+      profile.registration_no === interest.sender
+    );
+
+    return {
+      ...interest.toObject(), // Convert mongoose doc to plain object
+      sender: senderProfile || null // Replace sender string with profile data
+    };
+  });
+
+  res.status(200).json(populatedInterests);
 });
 
 
