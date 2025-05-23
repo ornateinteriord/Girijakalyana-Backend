@@ -1,63 +1,66 @@
 const mongoose = require('mongoose');
 
 const interestSchema = new mongoose.Schema({
+  interest_id: {
+    type: Number,
+  },
   sender: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Profile', 
-    required: true 
-  },
-  recipient: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Profile', 
-  },
-  first_name:{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Profile',
-
-  },
- last_name:{
-  type: mongoose.Schema.Types.ObjectId,
-  ref:'Profile', 
- },
- age:{
-  type: mongoose.Schema.Types.ObjectId,
-  ref:'Profile', 
- },
-  senderRegistrationNo: { 
     type: String, 
     required: true 
   },
-  recipientRegistrationNo: { 
+  recipient: { 
     type: String, 
     required: true 
   },
   status: { 
     type: String, 
     enum: ['pending', 'accepted', 'rejected', 'withdrawn'], 
-    default: 'none' 
+    default: 'pending'
   },
   message: {
     type: String,
-    default: ''
+    default: 'Expressed interest in you'
+  },
+  date: {
+    type: String,
+    default: () => new Date().toISOString().split('T')[0]
   }
 }, { 
   timestamps: true,
-  // Auto-create createdAt and updatedAt fields
+  collection: "interests"
 });
 
-// Add compound index to prevent duplicate interests
+
 interestSchema.index({ 
   sender: 1, 
   recipient: 1 
 }, { 
   unique: true,
-  name: 'unique_interest' // Give the index a name
+  name: 'unique_interest'
 });
 
-// Update timestamp middleware
-interestSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
+
+interestSchema.pre('save', async function(next) {
+  if (!this.isNew) {
+    return next();
+  }
+
+  try {
+    const lastInterest = await this.constructor.findOne({}, 'interest_id')
+      .sort({ interest_id: -1 })
+      .limit(1)
+      .lean()
+      .exec();
+
+    this.interest_id = lastInterest ? lastInterest.interest_id + 1 : 1;
+    if (!this.date) {
+      this.date = new Date().toISOString().split('T')[0];
+    }
+
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
 
 const Interest = mongoose.model('Interest', interestSchema);
