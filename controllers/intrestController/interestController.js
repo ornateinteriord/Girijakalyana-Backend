@@ -249,6 +249,52 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
 });
 
 
+const getInterestCounts = asyncHandler(async (req, res) => {
+  const { registrationNo } = req.params;
+
+  if (!registrationNo) {
+    return res.status(400).json({ 
+      message: "Registration number is required" 
+    });
+  }
+
+  try {
+    // Get all counts in parallel
+    const [receivedCount, sentCount, acceptedCount] = await Promise.all([
+      // Received interests count (pending)
+      Interest.countDocuments({
+        recipient: registrationNo,
+        status: 'pending'
+      }),
+      
+      // Sent interests count (pending)
+      Interest.countDocuments({ 
+        sender: registrationNo,
+        status: "pending" 
+      }),
+      
+      // Accepted interests count
+      Interest.countDocuments({
+        recipient: registrationNo,
+        status: "accepted"
+      })
+    ]);
+
+    res.status(200).json({
+      received: receivedCount,
+      sent: sentCount,
+      accepted: acceptedCount
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Error fetching interest counts",
+      error: error.message 
+    });
+  }
+});
+
+
+
 
 
 module.exports = {
@@ -258,5 +304,7 @@ module.exports = {
   updateInterestStatus,
   getReceivedInterests,
   getAcceptedInterests,
-  cancelInterestRequest
+  cancelInterestRequest,
+  getInterestCounts
+
 };
