@@ -53,24 +53,41 @@ const expressInterest = asyncHandler(async (req, res) => {
 
 
 const getReceivedInterests = asyncHandler(async (req, res) => {
-  const { recipient } = req.params;
+  try {
+    const { recipient } = req.params;
+    const recipientRole = req.user.user_role;
 
-  if (!recipient) {
-    return res.status(400).json({ message: "Recipient registration number is required" });
+    if (!recipient) {
+      return res.status(400).json({ 
+        message: "Recipient registration number is required" 
+      });
+    }
+
+    const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
+
+    const allProfiles = await Profile.find().select(excludeFields);
+
+    const pendingInterests = await Interest.find({
+      recipient,
+      status: "pending"
+    });
+
+    const interests = pendingInterests.map(interest => {
+      const senderProfile = allProfiles.find(profile => 
+        profile.registration_no === interest.sender
+      );
+
+      return {
+        ...interest.toObject(), // Convert mongoose doc to plain object
+        sender: senderProfile || null // Replace sender string with profile data
+      };
+    });
+
+    res.status(200).json(interests);
+  } catch (error) {
+     res.status(500).json({ success: false, message: error.message });
   }
-
-  const interests = await Interest.find({
-    recipient,
-    status: 'pending'
-  }).populate({
-    path: 'sender',
-    select: 'firstName lastName profileImg age height address registration_no'
-  });
-
-  res.status(200).json(interests);
 });
-
-
 
 const getSentInterests = asyncHandler(async (req, res) => {
   const { sender } = req.params;
