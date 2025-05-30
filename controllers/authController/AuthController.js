@@ -163,9 +163,73 @@ const resetPassword = async (req, res) => {
 
 
 
+const getDashboardStats = async (req, res) => {
+  try {
+    const totalProfiles = await profile.countDocuments({
+      type_of_user: { $in: ["FreeUser", "SilverUser", "PremiumUser"] }
+    });
+
+    const currentDate = new Date();
+    
+    // Start of week (Sunday)
+    const startOfWeek = new Date(currentDate);
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
+    startOfWeek.setHours(0, 0, 0, 0); 
+    
+    const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const thisWeekRegistrations = await profile.countDocuments({
+      $expr: {
+        $gte: [
+          {
+            $dateFromString: {
+              dateString: "$registration_date",
+              format: "%m/%d/%Y"
+            }
+          },
+          startOfWeek
+        ]
+      }
+    });
+
+    const thisMonthRegistrations = await profile.countDocuments({
+      $expr: {
+        $gte: [
+          {
+            $dateFromString: {
+              dateString: "$registration_date",
+              format: "%m/%d/%Y"
+            }
+          },
+          startOfMonth
+        ]
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        totalProfiles, 
+        thisWeekRegistrations,
+        thisMonthRegistrations
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+};
+
+
+
 
 module.exports = {
   signUp,
   login,
   resetPassword,
+  getDashboardStats
 };
