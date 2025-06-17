@@ -258,10 +258,9 @@ const getRecentRegisters = async (req, res) => {
 
     res.status(200).json(formattedMembers);
   } catch (error) {
-    console.error('Error fetching recent members:', error);
-    res.status(500).json({ 
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };
