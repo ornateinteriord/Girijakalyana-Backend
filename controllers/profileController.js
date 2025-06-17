@@ -1,6 +1,6 @@
-const profile = require("../models/profile");
 const Profile = require("../models/profile");
 const UserModel = require("../models/user");
+const { blurAndGetURL } = require("../utils/ImageBlur");
 
 
 // Get profile by registration number
@@ -32,7 +32,7 @@ const updateProfile = async (req, res) => {
     const { registration_no } = req.params;
     const { _id, ...others } = req.body;
     const profile = await Profile.findOneAndUpdate(
-      {registration_no },
+      { registration_no },
       { $set: others },
       { new: true }
     );
@@ -45,7 +45,7 @@ const updateProfile = async (req, res) => {
     }
 
     const userUpdate = await UserModel.findOneAndUpdate(
-      {  ref_no:registration_no },
+      { ref_no: registration_no },
       { $set: others },
       { new: true }
     );
@@ -72,7 +72,7 @@ const getAllUserDetails = async (req, res) => {
   try {
     const userRole = req.user.user_role;
 
-    const userDetails = await UserModel.aggregate([
+    let userDetails = await UserModel.aggregate([
       {
         $lookup: {
           from: "registration_tbl",
@@ -91,8 +91,8 @@ const getAllUserDetails = async (req, res) => {
         $replaceRoot: {
           newRoot: {
             $mergeObjects: [
-              "$$ROOT",              
-              "$profile",            
+              "$$ROOT",
+              "$profile",
               { profile: "$profile" }
             ]
           }
@@ -110,7 +110,26 @@ const getAllUserDetails = async (req, res) => {
         }
       }
     ]);
-    
+
+    if (userRole === "FreeUser") {
+      userDetails = await Promise.all(
+        userDetails.map((user) => {
+          if (user.image) {
+            return blurAndGetURL(user.image)
+              .then((blurred) => {
+                user.image = blurred;
+                return user;
+              })
+              .catch(() => {
+                user.image = null;
+                return user;
+              });
+          }
+          return Promise.resolve(user);
+        })
+      );
+    }
+
     res.status(200).json({ success: true, users: userDetails });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -155,7 +174,9 @@ const changePassword = async (req, res) => {
 };
 
 
-module.exports = { getProfileByRegistrationNo,
-                  updateProfile,
-                  getAllUserDetails,
-                changePassword };
+module.exports = {
+  getProfileByRegistrationNo,
+  updateProfile,
+  getAllUserDetails,
+  changePassword
+};
