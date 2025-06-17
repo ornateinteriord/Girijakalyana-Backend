@@ -1,6 +1,7 @@
 const Profile = require("../models/profile");
 const UserModel = require("../models/user");
 const { blurAndGetURL } = require("../utils/ImageBlur");
+const Interest = require("../models/Intrest/Intrest");
 
 
 // Get profile by registration number
@@ -111,21 +112,58 @@ const getAllUserDetails = async (req, res) => {
       }
     ]);
 
-    if (userRole === "FreeUser") {
+    if (userRole === "FreeUser" || userRole === "PremiumUser") {
       userDetails = await Promise.all(
         userDetails.map((user) => {
-          if (user.image) {
+          // Default: show normal image
+          if (!user.image) return Promise.resolve(user);
+
+          // Secure image logic
+          const secureType = user.secure_image;
+          if (secureType === "disable") {
+            // Always blur
             return blurAndGetURL(user.image)
-              .then((blurred) => {
-                user.image = blurred;
-                return user;
-              })
-              .catch(() => {
-                user.image = null;
-                return user;
-              });
+              .then((blurred) => { user.image = blurred; return user; })
+              .catch(() => { user.image = null; return user; });
           }
-          return Promise.resolve(user);
+          if (secureType === "enable") {
+            // Always normal
+            return Promise.resolve(user);
+          }
+          if (secureType === "Premiumuser") {
+            // Show normal for PremiumUser, blur for others
+            if (userRole === "PremiumUser") {
+              return Promise.resolve(user);
+            } else {
+              return blurAndGetURL(user.image)
+                .then((blurred) => { user.image = blurred; return user; })
+                .catch(() => { user.image = null; return user; });
+            }
+          }
+          if (secureType === "requestuser") {
+            // Check if logged-in user and this user have accepted connection
+            return Interest.findOne({
+              $or: [
+                { sender: req.user.ref_no, recipient: user.ref_no, status: "accepted" },
+                { sender: user.ref_no, recipient: req.user.ref_no, status: "accepted" }
+              ]
+            }).then((connection) => {
+              if (connection) {
+                return user; // Show normal image
+              } else {
+                return blurAndGetURL(user.image)
+                  .then((blurred) => { user.image = blurred; return user; })
+                  .catch(() => { user.image = null; return user; });
+              }
+            }).catch(() => {
+              user.image = null;
+              return user;
+            });
+          }
+          // Default fallback: blur
+          return blurAndGetURL(user.image)
+            .then((blurred) => { user.image = blurred; return user; })
+            .catch(() => { user.image = null; return user; });
         })
       );
     }
