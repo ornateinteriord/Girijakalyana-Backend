@@ -11,7 +11,7 @@ const FormatDate = (dateString) => {
     "YYYY/MM/DD",
     "DD.MM.YYYY", 
     "DD MM YYYY",
-    "YYYY-MM-DDTHH:mm:ss.SSSZ" 
+    "YYYY-MM-DDTHH:mm:ss.SSSZ"  
   ];
   
   const date = moment(dateString, acceptedFormats, true);

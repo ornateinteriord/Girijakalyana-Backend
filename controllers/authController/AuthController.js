@@ -9,7 +9,8 @@ const recoverySubject = "GirijaKalyana - Password Recovery";
 
 const signUp = async (req, res) => {
   try {
-    const { username, password, ...otherDetails } = req.body;
+    const { username, password, user_role, ...otherDetails } = req.body;
+
     const existingUser = await UserModel.findOne({ username });
     if (existingUser) {
       return res
@@ -23,10 +24,7 @@ const signUp = async (req, res) => {
     ]);
     const newUserId = lastUser.length ? lastUser[0].user_id + 1 : 1;
     const newRefNo = lastUser.length
-      ? `SGM${String(parseInt(lastUser[0].ref_no.slice(3)) + 1).padStart(
-          3,
-          "0"
-        )}`
+      ? `SGM${String(parseInt(lastUser[0].ref_no.slice(3)) + 1).padStart(3, "0")}`
       : "SGM001";
 
     const newUser = new UserModel({
@@ -34,6 +32,7 @@ const signUp = async (req, res) => {
       username,
       password,
       ref_no: newRefNo,
+      user_role,
       ...otherDetails,
     });
 
@@ -47,8 +46,9 @@ const signUp = async (req, res) => {
       email_id: username,
       type_of_user: newUser.user_role,
       registration_date: formattedDate,
-      ...otherDetails, // Include other profile details from request
+      ...otherDetails,
     });
+
     await newProfile.save();
 
     return res.status(201).json({
@@ -57,10 +57,13 @@ const signUp = async (req, res) => {
       profile: newProfile,
       message: "Signup successful",
     });
+
   } catch (error) {
+    console.error("Signup error:", error); 
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 const login = async (req, res) => {
   try {
@@ -76,7 +79,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Compare passwords (in real apps, use bcrypt.compare)
     if (user.password !== password) {
       return res.status(400).json({
         success: false,
@@ -84,7 +86,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Check account status
     if (user.status !== "active") {
       return res.status(400).json({
         success: false,
