@@ -4,6 +4,11 @@ const { blurAndGetURL } = require("./ImageBlur");
 const processUserImages = async (userDetails, loggedInUserRefNo, userRole) => {
   return Promise.all(
     userDetails.map(async (user) => {
+      if (user.image_verification !== 'active') {
+        user.image = null;
+        return user;
+      }
+      
       if (!user.image) return user;
 
       const secureType = user.secure_image;
