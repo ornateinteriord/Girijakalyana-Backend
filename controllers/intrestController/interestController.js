@@ -2,6 +2,7 @@ const asyncHandler = require("express-async-handler");
 const Interest = require("../../models/Intrest/Intrest");
 const Profile = require("../../models/profile");
 const profile = require("../../models/profile");
+const { processUserImages } = require("../../utils/SecureImageHandler");
 
 // @desc    Express interest
 // @route   POST /api/user/express
@@ -65,7 +66,9 @@ const getReceivedInterests = asyncHandler(async (req, res) => {
 
     const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
 
-    const allProfiles = await Profile.find().select(excludeFields);
+    let allProfiles = await Profile.find().select(excludeFields);
+    allProfiles = await processUserImages(allProfiles, req.user.ref_no, recipientRole);
+
 
     const pendingInterests = await Interest.find({
       recipient,
@@ -99,7 +102,8 @@ const getSentInterests = asyncHandler(async (req, res) => {
   }
 
   const excludeFields = senderRole === 'FreeUser' ? '-mobile_no -email_id' : '';
-  const allProfiles = await Profile.find().select(excludeFields);
+  let allProfiles = await Profile.find().select(excludeFields);
+    allProfiles = await processUserImages(allProfiles, req.user.ref_no, senderRole);
 
   const interests = await Interest.find({ 
     sender,
@@ -244,7 +248,8 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
 
   const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
 
-  const allProfiles = await Profile.find().select(excludeFields);
+  let allProfiles = await Profile.find().select(excludeFields);
+  allProfiles = await processUserImages(allProfiles, req.user.ref_no, recipientRole);
 
   const acceptedInterests = await Interest.find({
     recipient,
