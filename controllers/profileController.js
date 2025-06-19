@@ -4,7 +4,6 @@ const { blurAndGetURL } = require("../utils/ImageBlur");
 const Interest = require("../models/Intrest/Intrest");
 const { processUserImages } = require("../utils/SecureImageHandler");
 
-
 // Get profile by registration number
 const getProfileByRegistrationNo = async (req, res) => {
   try {
@@ -27,7 +26,6 @@ const getProfileByRegistrationNo = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 const updateProfile = async (req, res) => {
   try {
@@ -69,7 +67,6 @@ const updateProfile = async (req, res) => {
   }
 };
 
-
 const getAllUserDetails = async (req, res) => {
   try {
     const userRole = req.user.user_role;
@@ -80,48 +77,46 @@ const getAllUserDetails = async (req, res) => {
           from: "registration_tbl",
           localField: "ref_no",
           foreignField: "registration_no",
-          as: "profile"
-        }
+          as: "profile",
+        },
       },
       {
         $unwind: {
           path: "$profile",
-          preserveNullAndEmptyArrays: true
-        }
+          preserveNullAndEmptyArrays: true,
+        },
       },
       {
         $replaceRoot: {
           newRoot: {
-            $mergeObjects: [
-              "$$ROOT",
-              "$profile",
-              { profile: "$profile" }
-            ]
-          }
-        }
+            $mergeObjects: ["$$ROOT", "$profile", { profile: "$profile" }],
+          },
+        },
       },
       {
         $addFields: {
-          mobile_no: userRole === 'FreeUser' ? null : "$mobile_no",
-          email_id: userRole === 'FreeUser' ? null : "$email_id"
-        }
+          mobile_no: userRole === "FreeUser" ? null : "$mobile_no",
+          email_id: userRole === "FreeUser" ? null : "$email_id",
+        },
       },
       {
         $project: {
-          profile: 0
-        }
-      }
+          profile: 0,
+        },
+      },
     ]);
-   if (userRole === "FreeUser" || userRole === "PremiumUser" ) {
-      userDetails = await processUserImages(userDetails, req.user.ref_no, userRole);
-    }
+
+    userDetails = await processUserImages(
+      userDetails,
+      req.user.ref_no,
+      userRole
+    );
 
     res.status(200).json({ success: true, users: userDetails });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 // Change password controller
 const changePassword = async (req, res) => {
@@ -159,10 +154,9 @@ const changePassword = async (req, res) => {
   }
 };
 
-
 module.exports = {
   getProfileByRegistrationNo,
   updateProfile,
   getAllUserDetails,
-  changePassword
+  changePassword,
 };
