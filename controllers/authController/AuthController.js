@@ -4,6 +4,7 @@ const profile = require("../../models/profile");
 const { sendMail } = require("../../utils/EmailService");
 const { generateOTP, storeOTP, verifyOTP } = require("../../utils/OtpService");
 const { FormatDate } = require("../../utils/DateFormate");
+const PromotersModel = require("../../models/promoters/Promoters");
 
 const recoverySubject = "GirijaKalyana - Password Recovery";
 
@@ -69,46 +70,53 @@ const login = async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    // Find user with exact username match
     const user = await UserModel.findOne({ username });
+    const promoter = await PromotersModel.findOne({ username });
 
-    if (!user) {
+    const authUser = user || promoter;
+    const userType = user ? 'user' : 'promoter';
+
+    if (!authUser) {
       return res.status(400).json({
         success: false,
         message: "Invalid username or password",
       });
     }
 
-    if (user.password !== password) {
+    if (authUser.password !== password) {
       return res.status(400).json({
         success: false,
         message: "Invalid username or password",
       });
     }
 
-    if (user.status !== "active") {
+    if (authUser.status !== "active") {
       return res.status(400).json({
         success: false,
-        message: `Account is ${user.status}. Please contact support.`,
-        status: user.status,
-        UpdateStatus: user.UpdateStatus,
+        message: `Account is ${authUser.status}. Please contact support.`,
+        status: authUser.status,
+        UpdateStatus: authUser.UpdateStatus,
       });
     }
 
-    // Update login info
-    user.last_loggedin = new Date();
-    user.counter += 1;
-    user.loggedin_from =
+    authUser.last_loggedin = new Date();
+    authUser.counter += 1;
+    authUser.loggedin_from =
       req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-    await user.save();
+    await authUser.save();
 
-    // Create token with essential user data
+    const validUserRoles = ['FreeUser', 'PremiumUser', 'SilverUser', 'Admin'];
+    
+    const tokenUserRole = userType === 'user' 
+      ? (validUserRoles.includes(authUser.user_role) ? authUser.user_role : 'user')
+      : 'promoter';
+
     const token = jwt.sign(
       {
-        user_id: user.user_id,
-        username: user.username,
-        user_role: user.user_role,
-        ref_no: user.ref_no,
+        user_id: authUser.user_id,
+        username: authUser.username,
+        user_role: tokenUserRole,
+        ref_no: authUser.ref_no,
       },
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
@@ -117,7 +125,9 @@ const login = async (req, res) => {
     return res.status(200).json({
       success: true,
       token,
-      user,
+      user: {
+        ...authUser.toObject(),
+      },
       message: "Login successful",
     });
   } catch (error) {
