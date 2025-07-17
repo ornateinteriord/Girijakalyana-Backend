@@ -4,6 +4,9 @@ const { blurAndGetURL } = require("./ImageBlur");
 const processUserImages = async (userDetails, loggedInUserRefNo, userRole) => {
   return Promise.all(
     userDetails.map(async (user) => {
+      if (userRole === 'Admin') {
+        return user;
+      }
       if (user.image_verification !== 'active') {
         user.image = null;
         return user;
@@ -53,7 +56,7 @@ const processUserImages = async (userDetails, loggedInUserRefNo, userRole) => {
         }
       }
 
-      // Default fallback
+      
       try {
         user.image = await blurAndGetURL(user.image);
       } catch {
