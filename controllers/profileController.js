@@ -117,8 +117,95 @@ const getAllUserDetails = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+const searchUsersByInput = async (req, res) => {
+  try {
+    const { input } = req.query;
 
-// Change password controller
+    if (!input || input.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Search input is required",
+      });
+    }
+
+    const cleanedInput = input.trim().replace(/^["']+|["']+$/g, "");
+    const words = cleanedInput.split(/\s+/); // Split by one or more whitespace characters
+    const searchConditions = [];
+
+    // Always include individual field searches
+    const fullRegex = { $regex: cleanedInput, $options: "i" };
+    searchConditions.push(
+      { first_name: fullRegex },
+      { last_name: fullRegex },
+      { email_id: fullRegex },
+      { registration_no: fullRegex }
+    );
+
+    // If there are multiple words, add combinations for first+last name
+    if (words.length > 1) {
+      const [firstWord, secondWord] = words;
+      
+      // First word as first name, second as last name
+      searchConditions.push({
+        $and: [
+          { first_name: { $regex: firstWord, $options: "i" } },
+          { last_name: { $regex: secondWord, $options: "i" } }
+        ]
+      });
+      
+      // First word as last name, second as first name
+      searchConditions.push({
+        $and: [
+          { first_name: { $regex: secondWord, $options: "i" } },
+          { last_name: { $regex: firstWord, $options: "i" } }
+        ]
+      });
+      
+      // For cases with more than 2 words, combine remaining words
+      if (words.length > 2) {
+        const remainingWords = words.slice(2).join(" ");
+        
+        // First word as first name, rest as last name
+        searchConditions.push({
+          $and: [
+            { first_name: { $regex: firstWord, $options: "i" } },
+            { last_name: { $regex: `${secondWord} ${remainingWords}`, $options: "i" } }
+          ]
+        });
+        
+        // Last word as last name, rest as first name
+        searchConditions.push({
+          $and: [
+            { first_name: { $regex: `${firstWord} ${secondWord}`, $options: "i" } },
+            { last_name: { $regex: remainingWords, $options: "i" } }
+          ]
+        });
+      }
+    }
+
+    const users = await Profile.find({ $or: searchConditions });
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No users found matching the input.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      users,
+    });
+  } catch (error) {
+    console.error("Search error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+
 const changePassword = async (req, res) => {
   try {
     const { registration_no } = req.params;
@@ -159,4 +246,5 @@ module.exports = {
   updateProfile,
   getAllUserDetails,
   changePassword,
+  searchUsersByInput,
 };
