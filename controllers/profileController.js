@@ -71,6 +71,14 @@ const getAllUserDetails = async (req, res) => {
   try {
     const userRole = req.user.user_role;
 
+    let page = parseInt(req.body.page, 10);
+    let pageSize = parseInt(req.body.pageSize, 10);
+    if (isNaN(page) || page < 0) page = 0;
+    if (isNaN(pageSize) || pageSize < 1) pageSize = 10;
+
+    
+    const totalRecords = await UserModel.countDocuments();
+
     let userDetails = await UserModel.aggregate([
       {
         $lookup: {
@@ -104,6 +112,9 @@ const getAllUserDetails = async (req, res) => {
           profile: 0,
         },
       },
+      { $sort: { _id: -1 } },
+      { $skip: page * pageSize },
+      { $limit: pageSize },
     ]);
 
     userDetails = await processUserImages(
@@ -112,7 +123,13 @@ const getAllUserDetails = async (req, res) => {
       userRole
     );
 
-    res.status(200).json({ success: true, users: userDetails });
+    res.status(200).json({
+      success: true,
+      content: userDetails,
+      currentPage: page,
+      pageSize: pageSize,
+      totalRecords: totalRecords
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
