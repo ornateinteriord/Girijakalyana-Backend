@@ -3,6 +3,7 @@ const UserModel = require("../models/user");
 const { blurAndGetURL } = require("../utils/ImageBlur");
 const { processUserImages } = require("../utils/SecureImageHandler");
 const BlurredImages = require('../models/blurredImages');
+const { getPaginationParams } = require("../utils/pagination");
 
 // Get profile by registration number
 const getProfileByRegistrationNo = async (req, res) => {
@@ -79,16 +80,18 @@ const updateProfile = async (req, res) => {
 const getAllUserDetails = async (req, res) => {
   try {
     const userRole = req.user.user_role;
-
-    let page = parseInt(req.body.page, 10);
-    let pageSize = parseInt(req.body.pageSize, 10);
-    if (isNaN(page) || page < 0) page = 0;
-    if (isNaN(pageSize) || pageSize < 1) pageSize = 10;
-
-    
-    const totalRecords = await UserModel.countDocuments();
+     const loggedInUserId = req.user.ref_no; 
+    const { page, pageSize } = getPaginationParams(req);
+    const totalRecords = await UserModel.countDocuments({
+       ref_no: { $ne: loggedInUserId },
+    });
 
     let userDetails = await UserModel.aggregate([
+       {
+        $match: {
+          ref_no: { $ne: loggedInUserId },
+        },
+      },
       {
         $lookup: {
           from: "registration_tbl",
@@ -121,7 +124,7 @@ const getAllUserDetails = async (req, res) => {
           profile: 0,
         },
       },
-      { $sort: { _id: -1 } },
+      { $sort: { registration_no: 1 } },
       { $skip: page * pageSize },
       { $limit: pageSize },
     ]);
@@ -143,6 +146,49 @@ const getAllUserDetails = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+const getMyMatches = async (req, res) => {
+  try {
+    const userRegNo = req.user.ref_no;
+    const myProfile = await Profile.findOne({ registration_no: userRegNo });
+    if (!myProfile) {
+      return res.status(404).json({ success: false, message: "Profile not found for current user." });
+    }
+    // Build $or filter for any preference match
+    const orFilters = [];
+    if (myProfile.from_age_preference != null && myProfile.to_age_preference != null) {
+      orFilters.push({ age: { $gte: myProfile.from_age_preference, $lte: myProfile.to_age_preference } });
+    }
+    if (myProfile.from_height_preference && myProfile.to_height_preference) {
+      orFilters.push({ height: { $gte: myProfile.from_height_preference, $lte: myProfile.to_height_preference } });
+    }
+    if (myProfile.caste_preference) {
+      orFilters.push({ caste: myProfile.caste_preference });
+    }
+    const filter = {
+      registration_no: { $ne: userRegNo },
+      ...(orFilters.length > 0 ? { $or: orFilters } : {})
+    };
+
+    const { page, pageSize } = getPaginationParams(req);
+    const totalRecords = await Profile.countDocuments(filter);
+    const matches = await Profile.find(filter)
+      .sort({ registration_no: 1 })
+      .collation({ locale: "en", numericOrdering: true })
+      .skip(page * pageSize)
+      .limit(pageSize);
+
+    res.status(200).json({
+      success: true,
+      content: matches,
+      currentPage: page,
+      pageSize: pageSize,
+      totalRecords: totalRecords
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+}
 const searchUsersByInput = async (req, res) => {
   try {
     const { input } = req.query;
@@ -273,4 +319,5 @@ module.exports = {
   getAllUserDetails,
   changePassword,
   searchUsersByInput,
+  getMyMatches
 };
