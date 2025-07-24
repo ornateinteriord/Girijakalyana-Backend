@@ -70,7 +70,8 @@ const ProfileSchema = new mongoose.Schema({
   assistance: String,
   nakshatra: String,
   boost_profile: String,
-  boosted_on: String
-}, { collection: 'registration_tbl' }); // Specify your collection name here
+  boosted_on: String,
+  otherInfo: String,
+}, { collection: 'registration_tbl' }); 
 
 module.exports = mongoose.model('Profile', ProfileSchema);

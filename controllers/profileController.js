@@ -1,8 +1,8 @@
 const Profile = require("../models/profile");
 const UserModel = require("../models/user");
 const { blurAndGetURL } = require("../utils/ImageBlur");
-const Interest = require("../models/Intrest/Intrest");
 const { processUserImages } = require("../utils/SecureImageHandler");
+const BlurredImages = require('../models/blurredImages');
 const { getPaginationParams } = require("../utils/pagination");
 
 // Get profile by registration number
@@ -31,10 +31,10 @@ const getProfileByRegistrationNo = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { registration_no } = req.params;
-    const { _id, ...others } = req.body;
+    const { _id,image, ...others } = req.body;
     const profile = await Profile.findOneAndUpdate(
       { registration_no },
-      { $set: others },
+      { $set: { ...others, ...(image && { image }) } },
       { new: true }
     );
 
@@ -56,6 +56,15 @@ const updateProfile = async (req, res) => {
         success: false,
         message: "User not found with the given registration number",
       });
+    }
+
+     if (image) {
+      const blurredUrl = await blurAndGetURL(image); // generate blurred image
+      await BlurredImages.findOneAndUpdate(
+        { user_id: profile.registration_no },
+        { $set: { blurredImage: blurredUrl } },
+        { upsert: true, new: true }
+      );
     }
 
     res.status(200).json({
