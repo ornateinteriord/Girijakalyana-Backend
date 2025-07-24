@@ -165,8 +165,18 @@ const getMyMatches = async (req, res) => {
     if (myProfile.caste_preference) {
       orFilters.push({ caste: myProfile.caste_preference });
     }
+    let genderFilter = {};
+    if (myProfile.gender) {
+      if (myProfile.gender.toLowerCase() === "bride") {
+        genderFilter.gender = { $regex: /^bridegroom$/i };
+      } else if (myProfile.gender.toLowerCase() === "bridegroom") {
+        genderFilter.gender = { $regex: /^bride$/i };
+      }
+    }
+
     const filter = {
       registration_no: { $ne: userRegNo },
+      ...genderFilter,
       ...(orFilters.length > 0 ? { $or: orFilters } : {})
     };
 
