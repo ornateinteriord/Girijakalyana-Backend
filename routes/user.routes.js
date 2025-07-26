@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getProfileByRegistrationNo, updateProfile, getAllUserDetails, changePassword, searchUsersByInput, getMyMatches } = require('../controllers/profileController');
 const authenticateToken = require('../middleware/auth.middleware');
-const {expressInterest,getSentInterests,getInterestStatus,updateInterestStatus,getReceivedInterests,getAcceptedInterests, cancelInterestRequest, getInterestCounts} = require('../controllers/intrestController/interestController');
+const {expressInterest,getSentInterests,getInterestStatus,updateInterestStatus,getReceivedInterests,getAcceptedInterests, cancelInterestRequest, getInterestCounts, getAcceptedConnections} = require('../controllers/intrestController/interestController');
 
 // Profile routes
 router.get('/profile/:registration_no', authenticateToken, getProfileByRegistrationNo);
@@ -22,5 +22,6 @@ router.post("/change-password/:registration_no",authenticateToken, changePasswor
 router.get("/interest-counts/:registrationNo", getInterestCounts);
 router.get("/search", searchUsersByInput);
 router.post("/my-matches",authenticateToken, getMyMatches);
+router.get("/connections/:userId", authenticateToken, getAcceptedConnections);
 
 module.exports = router;
