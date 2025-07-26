@@ -3,6 +3,7 @@ const Interest = require("../../models/Intrest/Intrest");
 const Profile = require("../../models/profile");
 const profile = require("../../models/profile");
 const { processUserImages } = require("../../utils/SecureImageHandler");
+const { getPaginationParams } = require("../../utils/pagination");
 
 // @desc    Express interest
 // @route   POST /api/user/express
@@ -281,21 +282,20 @@ const getInterestCounts = asyncHandler(async (req, res) => {
   }
 
   try {
-    // Get all counts in parallel
+
     const [receivedCount, sentCount, acceptedCount] = await Promise.all([
-      // Received interests count (pending)
+     
       Interest.countDocuments({
         recipient: registrationNo,
         status: 'pending'
       }),
       
-      // Sent interests count (pending)
+  
       Interest.countDocuments({ 
         sender: registrationNo,
         status: "pending" 
       }),
-      
-      // Accepted interests count
+
       Interest.countDocuments({
         recipient: registrationNo,
         status: "accepted"
@@ -315,7 +315,86 @@ const getInterestCounts = asyncHandler(async (req, res) => {
   }
 });
 
+const getAcceptedConnections = asyncHandler(async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const userRole = req.user.user_role;
 
+    if (!userId) {
+      return res.status(400).json({ 
+        message: "User registration number is required" 
+      });
+    }
+
+    // Get pagination parameters
+    const { page, pageSize } = getPaginationParams(req);
+    const skip = page * pageSize;
+
+    // First get total count of accepted connections
+    const totalRecords = await Interest.countDocuments({
+      $or: [
+        { sender: userId, status: 'accepted' },
+        { recipient: userId, status: 'accepted' }
+      ]
+    });
+
+    // Get paginated connections
+    const acceptedConnections = await Interest.find({
+      $or: [
+        { sender: userId, status: 'accepted' },
+        { recipient: userId, status: 'accepted' }
+      ]
+    })
+    .sort({ updatedAt: -1 }) // Newest first
+    .skip(skip)
+    .limit(pageSize);
+
+    // Get all needed profile IDs in one go
+    const profileIds = acceptedConnections.map(conn => 
+      conn.sender === userId ? conn.recipient : conn.sender
+    );
+
+    // Fetch profiles with role-based field exclusion
+    const excludeFields = userRole === 'FreeUser' ? '-mobile_no -email_id' : '';
+    let profiles = await Profile.find({
+      registration_no: { $in: profileIds }
+    }).select(excludeFields);
+
+    // Process images
+    profiles = await processUserImages(profiles, req.user.ref_no, userRole);
+
+    // Map connections with profile data
+    const connections = acceptedConnections.map(connection => {
+      const isSender = connection.sender === userId;
+      const otherUserId = isSender ? connection.recipient : connection.sender;
+      const otherUserProfile = profiles.find(profile => 
+        profile.registration_no === otherUserId
+      );
+
+      return {
+        ...connection.toObject(),
+        profile: otherUserProfile || null,
+        direction: isSender ? 'sent' : 'received',
+        connectionDate: connection.updatedAt
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      content: connections,
+      currentPage: page,
+      pageSize: pageSize,
+      totalRecords: totalRecords
+    });
+
+  } catch (error) {
+    res.status(500).json({ 
+      success: false,
+      message: "Error fetching connections",
+      error: error.message 
+    });
+  }
+});
 
 
 
@@ -327,6 +406,7 @@ module.exports = {
   getReceivedInterests,
   getAcceptedInterests,
   cancelInterestRequest,
-  getInterestCounts
+  getInterestCounts,
+  getAcceptedConnections
 
 };

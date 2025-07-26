@@ -131,7 +131,6 @@ const getAllUserDetails = async (req, res) => {
 
     userDetails = await processUserImages(
       userDetails,
-      req.user.ref_no,
       userRole
     );
 
