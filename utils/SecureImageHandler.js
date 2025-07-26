@@ -14,7 +14,7 @@ const processUserImages = async (userDetails, loggedInUserRefNo, userRole) => {
 
       if (!user.image) return user;
 
-      const secureType = user.secure_image;
+      const secureType = user.secure_image?.toLowerCase() || 'disable';
 
       const getBlurredImage = async () => {
         try {
@@ -48,7 +48,7 @@ const processUserImages = async (userDetails, loggedInUserRefNo, userRole) => {
 
       if (secureType === "enable") return user;
 
-      if (secureType === "Premiumuser") {
+      if (secureType === "premiumuser") {
         if (["PremiumUser", "SilverUser"].includes(userRole)) return user;
         user.image = await getBlurredImage();
         return user;
