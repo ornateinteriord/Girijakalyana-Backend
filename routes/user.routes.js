@@ -20,7 +20,7 @@ router.get("/interest/received/:recipient", authenticateToken, getReceivedIntere
 router.get("/interest/accepted/:recipient", authenticateToken, getAcceptedInterests);
 router.post("/change-password/:registration_no",authenticateToken, changePassword);
 router.get("/interest-counts/:registrationNo", getInterestCounts);
-router.get("/search", searchUsersByInput);
+router.get("/search",authenticateToken, searchUsersByInput);
 router.post("/my-matches",authenticateToken, getMyMatches);
 router.get("/connections/:userId", authenticateToken, getAcceptedConnections);
 

@@ -2,7 +2,7 @@ const Profile = require("../models/profile");
 const UserModel = require("../models/user");
 const { blurAndGetURL } = require("../utils/ImageBlur");
 const { processUserImages } = require("../utils/SecureImageHandler");
-const BlurredImages = require('../models/blurredImages');
+const BlurredImages = require("../models/blurredImages");
 const { getPaginationParams } = require("../utils/pagination");
 
 // Get profile by registration number
@@ -31,7 +31,7 @@ const getProfileByRegistrationNo = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { registration_no } = req.params;
-    const { _id,image, ...others } = req.body;
+    const { _id, image, ...others } = req.body;
     const profile = await Profile.findOneAndUpdate(
       { registration_no },
       { $set: { ...others, ...(image && { image }) } },
@@ -58,7 +58,7 @@ const updateProfile = async (req, res) => {
       });
     }
 
-     if (image) {
+    if (image) {
       const blurredUrl = await blurAndGetURL(image); // generate blurred image
       await BlurredImages.findOneAndUpdate(
         { user_id: profile.registration_no },
@@ -80,14 +80,14 @@ const updateProfile = async (req, res) => {
 const getAllUserDetails = async (req, res) => {
   try {
     const userRole = req.user.user_role;
-     const loggedInUserId = req.user.ref_no; 
+    const loggedInUserId = req.user.ref_no;
     const { page, pageSize } = getPaginationParams(req);
     const totalRecords = await UserModel.countDocuments({
-       ref_no: { $ne: loggedInUserId },
+      ref_no: { $ne: loggedInUserId },
     });
 
     let userDetails = await UserModel.aggregate([
-       {
+      {
         $match: {
           ref_no: { $ne: loggedInUserId },
         },
@@ -131,6 +131,7 @@ const getAllUserDetails = async (req, res) => {
 
     userDetails = await processUserImages(
       userDetails,
+      loggedInUserId,
       userRole
     );
 
@@ -139,7 +140,7 @@ const getAllUserDetails = async (req, res) => {
       content: userDetails,
       currentPage: page,
       pageSize: pageSize,
-      totalRecords: totalRecords
+      totalRecords: totalRecords,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -151,15 +152,31 @@ const getMyMatches = async (req, res) => {
     const userRegNo = req.user.ref_no;
     const myProfile = await Profile.findOne({ registration_no: userRegNo });
     if (!myProfile) {
-      return res.status(404).json({ success: false, message: "Profile not found for current user." });
+      return res.status(404).json({
+        success: false,
+        message: "Profile not found for current user.",
+      });
     }
     // Build $or filter for any preference match
     const orFilters = [];
-    if (myProfile.from_age_preference != null && myProfile.to_age_preference != null) {
-      orFilters.push({ age: { $gte: myProfile.from_age_preference, $lte: myProfile.to_age_preference } });
+    if (
+      myProfile.from_age_preference != null &&
+      myProfile.to_age_preference != null
+    ) {
+      orFilters.push({
+        age: {
+          $gte: myProfile.from_age_preference,
+          $lte: myProfile.to_age_preference,
+        },
+      });
     }
     if (myProfile.from_height_preference && myProfile.to_height_preference) {
-      orFilters.push({ height: { $gte: myProfile.from_height_preference, $lte: myProfile.to_height_preference } });
+      orFilters.push({
+        height: {
+          $gte: myProfile.from_height_preference,
+          $lte: myProfile.to_height_preference,
+        },
+      });
     }
     if (myProfile.caste_preference) {
       orFilters.push({ caste: myProfile.caste_preference });
@@ -176,28 +193,48 @@ const getMyMatches = async (req, res) => {
     const filter = {
       registration_no: { $ne: userRegNo },
       ...genderFilter,
-      ...(orFilters.length > 0 ? { $or: orFilters } : {})
+      ...(orFilters.length > 0 ? { $or: orFilters } : {}),
     };
 
     const { page, pageSize } = getPaginationParams(req);
     const totalRecords = await Profile.countDocuments(filter);
-    const matches = await Profile.find(filter)
-      .sort({ registration_no: 1 })
-      .collation({ locale: "en", numericOrdering: true })
-      .skip(page * pageSize)
-      .limit(pageSize);
+    let matches = await Profile.aggregate([
+      { $match: filter },
+      {
+        $lookup: {
+          from: "user_tbl", // join user data to get `ref_no`
+          localField: "registration_no",
+          foreignField: "ref_no",
+          as: "user",
+        },
+      },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          ref_no: "$user.ref_no", // this is crucial!
+          image: "$image",
+          image_verification: "$image_verification",
+          secure_image: "$secure_image",
+        },
+      },
+      { $sort: { registration_no: 1 } },
+      { $skip: page * pageSize },
+      { $limit: pageSize },
+    ]);
+
+    matches = await processUserImages(matches, userRegNo, req.user.user_role);
 
     res.status(200).json({
       success: true,
       content: matches,
       currentPage: page,
       pageSize: pageSize,
-      totalRecords: totalRecords
+      totalRecords: totalRecords,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
-}
+};
 const searchUsersByInput = async (req, res) => {
   try {
     const { input } = req.query;
@@ -210,10 +247,9 @@ const searchUsersByInput = async (req, res) => {
     }
 
     const cleanedInput = input.trim().replace(/^["']+|["']+$/g, "");
-    const words = cleanedInput.split(/\s+/); // Split by one or more whitespace characters
+    const words = cleanedInput.split(/\s+/);
     const searchConditions = [];
 
-    // Always include individual field searches
     const fullRegex = { $regex: cleanedInput, $options: "i" };
     searchConditions.push(
       { first_name: fullRegex },
@@ -222,51 +258,65 @@ const searchUsersByInput = async (req, res) => {
       { registration_no: fullRegex }
     );
 
-    // If there are multiple words, add combinations for first+last name
     if (words.length > 1) {
       const [firstWord, secondWord] = words;
-      
-      // First word as first name, second as last name
       searchConditions.push({
         $and: [
           { first_name: { $regex: firstWord, $options: "i" } },
-          { last_name: { $regex: secondWord, $options: "i" } }
-        ]
+          { last_name: { $regex: secondWord, $options: "i" } },
+        ],
       });
-      
-      // First word as last name, second as first name
       searchConditions.push({
         $and: [
           { first_name: { $regex: secondWord, $options: "i" } },
-          { last_name: { $regex: firstWord, $options: "i" } }
-        ]
+          { last_name: { $regex: firstWord, $options: "i" } },
+        ],
       });
-      
-      // For cases with more than 2 words, combine remaining words
       if (words.length > 2) {
         const remainingWords = words.slice(2).join(" ");
-        
-        // First word as first name, rest as last name
         searchConditions.push({
           $and: [
             { first_name: { $regex: firstWord, $options: "i" } },
-            { last_name: { $regex: `${secondWord} ${remainingWords}`, $options: "i" } }
-          ]
+            { last_name: { $regex: `${secondWord} ${remainingWords}`, $options: "i" } },
+          ],
         });
-        
-        // Last word as last name, rest as first name
         searchConditions.push({
           $and: [
             { first_name: { $regex: `${firstWord} ${secondWord}`, $options: "i" } },
-            { last_name: { $regex: remainingWords, $options: "i" } }
-          ]
+            { last_name: { $regex: remainingWords, $options: "i" } },
+          ],
         });
       }
     }
 
-    const users = await Profile.find({ $or: searchConditions });
+    // Find matching profiles first
+    let profiles = await Profile.find({ $or: searchConditions });
 
-    if (!users || users.length === 0) {
+    // Extract registration_nos for lookup
+    const regNos = profiles.map((p) => p.registration_no);
+
+    // Lookup user details for these profiles
+    const users = await UserModel.find({ ref_no: { $in: regNos } }).lean();
+
+    // Merge profile + user data manually (to mimic your getMyMatches logic)
+    const merged = profiles.map((profile) => {
+      const user = users.find((u) => u.ref_no === profile.registration_no) || {};
+      return {
+        ...profile.toObject(),
+        user_role: user.user_role,
+        mobile_no: user.mobile_no,
+        image: profile.image,
+        image_verification: profile.image_verification,
+        secure_image: profile.secure_image,
+        email_id: profile.email_id,
+        ref_no: profile.registration_no,
+      };
+    });
+
+    // Process images with merged data
+    const processed = await processUserImages(merged, req.user.ref_no, req.user.user_role);
+
+    if (!processed || processed.length === 0) {
       return res.status(404).json({
         success: false,
         message: "No users found matching the input.",
@@ -275,7 +325,7 @@ const searchUsersByInput = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      users,
+      users: processed,
     });
   } catch (error) {
     console.error("Search error:", error);
@@ -328,5 +378,5 @@ module.exports = {
   getAllUserDetails,
   changePassword,
   searchUsersByInput,
-  getMyMatches
+  getMyMatches,
 };
