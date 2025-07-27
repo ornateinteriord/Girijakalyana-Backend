@@ -58,76 +58,138 @@ const getReceivedInterests = asyncHandler(async (req, res) => {
   try {
     const { recipient } = req.params;
     const recipientRole = req.user.user_role;
+    const loggedInUserId = req.user.ref_no;
 
     if (!recipient) {
-      return res.status(400).json({ 
-        message: "Recipient registration number is required" 
+      return res.status(400).json({
+        success: false,
+        message: "Recipient registration number is required",
       });
     }
 
-    const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
+    // Pagination
+    const { page, pageSize } = getPaginationParams(req);
 
-    let allProfiles = await Profile.find().select(excludeFields);
-    allProfiles = await processUserImages(allProfiles, req.user.ref_no, recipientRole);
-
-
+    // Get all pending interests for this recipient
     const pendingInterests = await Interest.find({
       recipient,
-      status: "pending"
+      status: "pending",
     });
 
-    const interests = pendingInterests.map(interest => {
-      const senderProfile = allProfiles.find(profile => 
-        profile.registration_no === interest.sender
+    const totalRecords = pendingInterests.length;
+
+    // Apply pagination
+    const paginatedInterests = pendingInterests.slice(
+      page * pageSize,
+      (page + 1) * pageSize
+    );
+
+    // Collect all sender registration numbers
+    const senderIds = paginatedInterests.map((i) => i.sender);
+
+    // Hide sensitive fields for FreeUser
+    const excludeFields = recipientRole === "FreeUser" ? "-mobile_no -email_id" : "";
+
+    // Fetch only profiles for these senders
+    let senderProfiles = await Profile.find({
+      registration_no: { $in: senderIds },
+    }).select(excludeFields);
+
+    // Process images
+    senderProfiles = await processUserImages(senderProfiles, loggedInUserId, recipientRole);
+
+    // Merge profiles into interests
+    const populatedInterests = paginatedInterests.map((interest) => {
+      const senderProfile = senderProfiles.find(
+        (p) => p.registration_no === interest.sender
       );
 
       return {
-        ...interest.toObject(), // Convert mongoose doc to plain object
-        sender: senderProfile || null // Replace sender string with profile data
+        ...interest.toObject(),
+        sender: senderProfile || null,
       };
     });
 
-    res.status(200).json(interests);
+    return res.status(200).json({
+      success: true,
+      content: populatedInterests,
+      currentPage: page,
+      pageSize,
+      totalRecords,
+    });
   } catch (error) {
-     res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
+
 
 const getSentInterests = asyncHandler(async (req, res) => {
-  const { sender } = req.params;
-  const senderRole = req.user.user_role;
+  try {
+    const { sender } = req.params;
+    const senderRole = req.user.user_role;
+    const loggedInUserId = req.user.ref_no;
 
-  if (!sender) {
-    res.status(400);
-    throw new Error('Sender registration number is required');
-  }
+    if (!sender) {
+      return res.status(400).json({
+        success: false,
+        message: "Sender registration number is required",
+      });
+    }
 
-  const excludeFields = senderRole === 'FreeUser' ? '-mobile_no -email_id' : '';
-  let allProfiles = await Profile.find().select(excludeFields);
-    allProfiles = await processUserImages(allProfiles, req.user.ref_no, senderRole);
+    // Pagination
+    const { page, pageSize } = getPaginationParams(req);
 
-  const interests = await Interest.find({ 
-    sender,
-    status: "pending" 
-  });
+    // Get all pending interests sent by this sender
+    const sentInterests = await Interest.find({
+      sender,
+      status: "pending",
+    });
 
-  const populatedInterests = interests.map(interest => {
-    const recipientProfile = allProfiles.find(profile => 
-      profile.registration_no === interest.recipient
+    const totalRecords = sentInterests.length;
+
+    // Apply pagination
+    const paginatedInterests = sentInterests.slice(
+      page * pageSize,
+      (page + 1) * pageSize
     );
 
-    return {
-      ...interest.toObject(), 
-      recipientdata: recipientProfile || null 
-    };
-  });
+    // Collect all recipient registration numbers
+    const recipientIds = paginatedInterests.map((i) => i.recipient);
 
-  res.status(200).json({
-    data: populatedInterests,
-    totalCount: populatedInterests.length,
-    totalPages: 1,
-  });
+    const excludeFields = senderRole === "FreeUser" ? "-mobile_no -email_id" : "";
+
+    // Fetch only profiles for these recipients
+    let recipientProfiles = await Profile.find({
+      registration_no: { $in: recipientIds },
+    }).select(excludeFields);
+
+    // Process images
+    recipientProfiles = await processUserImages(recipientProfiles, loggedInUserId, senderRole);
+
+    // Merge profiles into interests
+    const populatedInterests = paginatedInterests.map((interest) => {
+      const recipientProfile = recipientProfiles.find(
+        (p) => p.registration_no === interest.recipient
+      );
+
+      return {
+        ...interest.toObject(),
+        recipientdata: recipientProfile || null,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      content: populatedInterests,
+      currentPage: page,
+      pageSize,
+      totalRecords,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
+
 
 const cancelInterestRequest = asyncHandler(async (req, res) => {
   try {
@@ -238,37 +300,68 @@ const updateInterestStatus = asyncHandler(async (req, res) => {
 
 
 const getAcceptedInterests = asyncHandler(async (req, res) => {
-  const { recipient } = req.params;
-  const recipientRole = req.user.user_role;
+  try {
+    const { recipient } = req.params;
+    const recipientRole = req.user.user_role;
+    const loggedInUserId = req.user.ref_no;
 
-  if (!recipient) {
-    return res.status(400).json({ 
-      message: "Recipient registration number is required" 
+    if (!recipient) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Recipient registration number is required"
+      });
+    }
+
+    // Get pagination params (use same helper as your other controller)
+    const { page, pageSize } = getPaginationParams(req);
+
+    // Find accepted interests for this recipient
+    const acceptedInterests = await Interest.find({
+      recipient,
+      status: "accepted"
     });
+
+    const totalRecords = acceptedInterests.length;
+
+    // Apply pagination to the interests array (slice)
+    const paginatedInterests = acceptedInterests.slice(page * pageSize, (page + 1) * pageSize);
+
+    // Get all relevant sender registration numbers from paginated results
+    const senderRegistrationNos = paginatedInterests.map(i => i.sender);
+
+    // Build query to get only sender profiles
+    const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
+    let senderProfiles = await Profile.find({
+      registration_no: { $in: senderRegistrationNos }
+    }).select(excludeFields);
+
+    // Process images
+    senderProfiles = await processUserImages(senderProfiles, loggedInUserId, recipientRole);
+
+    // Combine interests with sender profiles
+    const populatedInterests = paginatedInterests.map(interest => {
+      const senderProfile = senderProfiles.find(
+        profile => profile.registration_no === interest.sender
+      );
+
+      return {
+        ...interest.toObject(),
+        sender: senderProfile || null,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      content: populatedInterests,
+      currentPage: page,
+      pageSize: pageSize,
+      totalRecords: totalRecords,
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
   }
-
-  const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
-
-  let allProfiles = await Profile.find().select(excludeFields);
-  allProfiles = await processUserImages(allProfiles, req.user.ref_no, recipientRole);
-
-  const acceptedInterests = await Interest.find({
-    recipient,
-    status: "accepted"
-  });
-
-  const populatedInterests = acceptedInterests.map(interest => {
-    const senderProfile = allProfiles.find(profile => 
-      profile.registration_no === interest.sender
-    );
-
-    return {
-      ...interest.toObject(), // Convert mongoose doc to plain object
-      sender: senderProfile || null // Replace sender string with profile data
-    };
-  });
-
-  res.status(200).json(populatedInterests);
 });
 
 
