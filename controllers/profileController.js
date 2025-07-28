@@ -157,7 +157,6 @@ const getMyMatches = async (req, res) => {
         message: "Profile not found for current user.",
       });
     }
-    // Build $or filter for any preference match
     const orFilters = [];
     if (
       myProfile.from_age_preference != null &&
@@ -221,6 +220,20 @@ const getMyMatches = async (req, res) => {
       { $skip: page * pageSize },
       { $limit: pageSize },
     ]);
+
+    matches = matches.map((profile) => {
+      let mobile_no = profile.mobile_no;
+      let email_id = profile.email_id;
+      if (req.user.user_role === "FreeUser") {
+        mobile_no = null;
+        email_id = null;
+      }
+      return {
+        ...profile,
+        mobile_no,
+        email_id,
+      };
+    });
 
     matches = await processUserImages(matches, userRegNo, req.user.user_role);
 
@@ -289,31 +302,30 @@ const searchUsersByInput = async (req, res) => {
       }
     }
 
-    // Find matching profiles first
     let profiles = await Profile.find({ $or: searchConditions });
-
-    // Extract registration_nos for lookup
     const regNos = profiles.map((p) => p.registration_no);
-
-    // Lookup user details for these profiles
     const users = await UserModel.find({ ref_no: { $in: regNos } }).lean();
 
-    // Merge profile + user data manually (to mimic your getMyMatches logic)
     const merged = profiles.map((profile) => {
       const user = users.find((u) => u.ref_no === profile.registration_no) || {};
+      let mobile_no = profile.mobile_no;
+      let email_id = profile.email_id;
+      if (req.user.user_role === "FreeUser") {
+        mobile_no = null;
+        email_id = null;
+      }
       return {
         ...profile.toObject(),
-        user_role: user.user_role,
-        mobile_no: user.mobile_no,
+        user_role: user.type_of_user,
+        mobile_no,
         image: profile.image,
         image_verification: profile.image_verification,
         secure_image: profile.secure_image,
-        email_id: profile.email_id,
+        email_id,
         ref_no: profile.registration_no,
       };
     });
 
-    // Process images with merged data
     const processed = await processUserImages(merged, req.user.ref_no, req.user.user_role);
 
     if (!processed || processed.length === 0) {

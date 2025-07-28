@@ -5,17 +5,15 @@ const profile = require("../../models/profile");
 const { processUserImages } = require("../../utils/SecureImageHandler");
 const { getPaginationParams } = require("../../utils/pagination");
 
-// @desc    Express interest
-// @route   POST /api/user/express
+
 const expressInterest = asyncHandler(async (req, res) => {
   const { sender, recipient, message } = req.body;
 
-  // Validate required fields
   if (!sender || !recipient) {
     return res.status(400).json({ message: "Sender and recipient are required" });
   }
 
-  // Find sender and recipient profiles
+
   const [senderuser, recipientuser] = await Promise.all([
     Profile.findOne({ registration_no: sender }),
     Profile.findOne({ registration_no: recipient })
@@ -25,7 +23,6 @@ const expressInterest = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Profiles not found" });
   }
 
-  // Check for existing interest
   const existingInterest = await Interest.findOne({
     $or: [
       { senderuser: senderuser._id, recipientuser: recipient._id },
@@ -40,7 +37,6 @@ const expressInterest = asyncHandler(async (req, res) => {
     });
   }
 
-  // Create new interest
   const interest = await Interest.create({
     senderuser: senderuser._id,
     recipientuser: recipientuser._id,
@@ -66,11 +62,7 @@ const getReceivedInterests = asyncHandler(async (req, res) => {
         message: "Recipient registration number is required",
       });
     }
-
-    // Pagination
     const { page, pageSize } = getPaginationParams(req);
-
-    // Get all pending interests for this recipient
     const pendingInterests = await Interest.find({
       recipient,
       status: "pending",
@@ -78,27 +70,25 @@ const getReceivedInterests = asyncHandler(async (req, res) => {
 
     const totalRecords = pendingInterests.length;
 
-    // Apply pagination
     const paginatedInterests = pendingInterests.slice(
       page * pageSize,
       (page + 1) * pageSize
     );
 
-    // Collect all sender registration numbers
+
     const senderIds = paginatedInterests.map((i) => i.sender);
 
-    // Hide sensitive fields for FreeUser
+
     const excludeFields = recipientRole === "FreeUser" ? "-mobile_no -email_id" : "";
 
-    // Fetch only profiles for these senders
+
     let senderProfiles = await Profile.find({
       registration_no: { $in: senderIds },
     }).select(excludeFields);
 
-    // Process images
+
     senderProfiles = await processUserImages(senderProfiles, loggedInUserId, recipientRole);
 
-    // Merge profiles into interests
     const populatedInterests = paginatedInterests.map((interest) => {
       const senderProfile = senderProfiles.find(
         (p) => p.registration_no === interest.sender
@@ -136,10 +126,8 @@ const getSentInterests = asyncHandler(async (req, res) => {
       });
     }
 
-    // Pagination
     const { page, pageSize } = getPaginationParams(req);
 
-    // Get all pending interests sent by this sender
     const sentInterests = await Interest.find({
       sender,
       status: "pending",
@@ -147,26 +135,21 @@ const getSentInterests = asyncHandler(async (req, res) => {
 
     const totalRecords = sentInterests.length;
 
-    // Apply pagination
     const paginatedInterests = sentInterests.slice(
       page * pageSize,
       (page + 1) * pageSize
     );
-
-    // Collect all recipient registration numbers
     const recipientIds = paginatedInterests.map((i) => i.recipient);
 
     const excludeFields = senderRole === "FreeUser" ? "-mobile_no -email_id" : "";
 
-    // Fetch only profiles for these recipients
     let recipientProfiles = await Profile.find({
       registration_no: { $in: recipientIds },
     }).select(excludeFields);
 
-    // Process images
     recipientProfiles = await processUserImages(recipientProfiles, loggedInUserId, senderRole);
 
-    // Merge profiles into interests
+  
     const populatedInterests = paginatedInterests.map((interest) => {
       const recipientProfile = recipientProfiles.find(
         (p) => p.registration_no === interest.recipient
@@ -195,13 +178,13 @@ const cancelInterestRequest = asyncHandler(async (req, res) => {
   try {
     const { sender, recipient } = req.body;
 
-    // Validate required fields
+   
     if (!sender || !recipient) {
       res.status(400);
       throw new Error("Both sender and recipient registration numbers are required");
     }
 
-    // Find and delete the pending interest request
+
     const deletedRequest = await Interest.findOneAndDelete({
       sender,
       recipient,
@@ -242,7 +225,7 @@ const getInterestStatus = asyncHandler(async (req, res) => {
       { sender, recipient },
       { sender: recipient, recipient: sender }
     ]
-  }).populate('sender recipient'); // ✅ Corrected field names
+  }).populate('sender recipient'); 
 
  
 
@@ -256,7 +239,7 @@ const getInterestStatus = asyncHandler(async (req, res) => {
     status: interest.status,
     interestId: interest._id,
     message: interest.message,
-    senderProfile: interest.sender, // ✅ now refers to the populated Profile
+    senderProfile: interest.sender, 
     recipientProfile: interest.recipient,
     isSender: interest.sender === sender
   }
@@ -265,8 +248,6 @@ const getInterestStatus = asyncHandler(async (req, res) => {
 });
 
 
-// @desc    Update interest status
-// @route   PUT /api/user/interest/:id
 const updateInterestStatus = asyncHandler(async (req, res) => {
   const { registration_no } = req.params; // This is sender
   const { recipient, status } = req.body;
@@ -312,33 +293,26 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
       });
     }
 
-    // Get pagination params (use same helper as your other controller)
     const { page, pageSize } = getPaginationParams(req);
 
-    // Find accepted interests for this recipient
     const acceptedInterests = await Interest.find({
       recipient,
       status: "accepted"
     });
 
     const totalRecords = acceptedInterests.length;
-
-    // Apply pagination to the interests array (slice)
     const paginatedInterests = acceptedInterests.slice(page * pageSize, (page + 1) * pageSize);
 
-    // Get all relevant sender registration numbers from paginated results
     const senderRegistrationNos = paginatedInterests.map(i => i.sender);
 
-    // Build query to get only sender profiles
     const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
     let senderProfiles = await Profile.find({
       registration_no: { $in: senderRegistrationNos }
     }).select(excludeFields);
 
-    // Process images
     senderProfiles = await processUserImages(senderProfiles, loggedInUserId, recipientRole);
 
-    // Combine interests with sender profiles
+
     const populatedInterests = paginatedInterests.map(interest => {
       const senderProfile = senderProfiles.find(
         profile => profile.registration_no === interest.sender
