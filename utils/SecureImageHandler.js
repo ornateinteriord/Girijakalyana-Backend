@@ -18,7 +18,6 @@ const processUserImages = async (userDetails, loggedInUserRefNo, userRole) => {
 
       const getBlurredImage = async () => {
         try {
-          // Use registration_no to find blurred image
           const existingBlur = await BlurredImages.findOne({ user_id: user.registration_no });
 
           if (existingBlur) {
@@ -58,8 +57,8 @@ const processUserImages = async (userDetails, loggedInUserRefNo, userRole) => {
         try {
           const connection = await Interest.findOne({
             $or: [
-              { sender: loggedInUserRefNo, recipient: user.ref_no, status: "accepted" },
-              { sender: user.ref_no, recipient: loggedInUserRefNo, status: "accepted" }
+              { sender: loggedInUserRefNo, recipient: user.registration_no, status: "accepted" },
+              { sender: user.registration_no, recipient: loggedInUserRefNo, status: "accepted" }
             ]
           });
 
