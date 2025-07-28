@@ -14,7 +14,7 @@ const { getAllNews, addNews } = require('../controllers/news/NewsController');
 
 
 
-router.get('/all-user-details',authenticateToken,checkRole("Admin"),getAllUserDetails)
+router.post('/all-user-details',authenticateToken,checkRole("Admin"),getAllUserDetails)
 router.put('/upgrade-user/:registration_no',authenticateToken,checkRole("Admin"),updateProfile)
 router.put('/reset-password/:registration_no',authenticateToken,checkRole("Admin"),updateProfile)
 router.get('/all-promoters',authenticateToken,checkRole("Admin"),getPromoters)

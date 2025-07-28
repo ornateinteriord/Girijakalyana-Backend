@@ -4,6 +4,8 @@ const { blurAndGetURL } = require("../utils/ImageBlur");
 const { processUserImages } = require("../utils/SecureImageHandler");
 const BlurredImages = require("../models/blurredImages");
 const { getPaginationParams } = require("../utils/pagination");
+const { getActiveMessage, getDeactiveMessage } = require("../utils/EmailMessages");
+const { sendMail } = require("../utils/EmailService");
 
 // Get profile by registration number
 const getProfileByRegistrationNo = async (req, res) => {
@@ -31,12 +33,25 @@ const getProfileByRegistrationNo = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { registration_no } = req.params;
-    const { _id, image, ...others } = req.body;
+    const { _id, image,status, ...others } = req.body;
     const profile = await Profile.findOneAndUpdate(
       { registration_no },
       { $set: { ...others, ...(image && { image }) } },
       { new: true }
     );
+
+    if( profile){
+      try {  
+        const {activatedMessage,activatedSubject} = getActiveMessage(profile);
+        const {deactivatedMessage,deactivatedSubject} = getDeactiveMessage(profile);
+        const subject = status === 'active' ? activatedSubject : deactivatedSubject;
+        const message = status === 'active' ? activatedMessage : deactivatedMessage;
+
+        await sendMail(profile.email_id, subject, message);
+      } catch (emailError) {
+        console.error(emailError);
+      }
+    }
 
     if (!profile) {
       return res.status(404).json({
