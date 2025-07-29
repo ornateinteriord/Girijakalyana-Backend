@@ -5,7 +5,7 @@ const { sendMail } = require("../../utils/EmailService");
 const { generateOTP, storeOTP, verifyOTP } = require("../../utils/OtpService");
 const { FormatDate } = require("../../utils/DateFormate");
 const PromotersModel = require("../../models/promoters/Promoters");
-const { getWelcomeMessage, getResetPasswordMessage } = require("../../utils/EmailMessages");
+const { getWelcomeMessage, getResetPasswordMessage, getPostResetPasswordMessage } = require("../../utils/EmailMessages");
 
 
 
@@ -155,6 +155,7 @@ const resetPassword = async (req, res) => {
         .json({ success: false, message: "Email not registered" });
     }
 
+    // Step 1: OTP verification only
     if (otp && !password) {
       if (!verifyOTP(email, otp)) {
         return res
@@ -163,18 +164,23 @@ const resetPassword = async (req, res) => {
       }
       return res.json({
         success: true,
-        message: "New password reset successfully!",
+        message: "OTP verified. Please provide new password.",
       });
     }
+
+
     if (password) {
       user.password = password;
       await user.save();
-
+      const { resetConfirmSubject, resetConfirmMessage } = getPostResetPasswordMessage();
+      await sendMail(user.username, resetConfirmSubject, resetConfirmMessage);
       return res.json({
         success: true,
         message: "Password reset successfully",
       });
     }
+
+    // Step 3: Initial request, generate and send OTP
     const newOtp = generateOTP();
     storeOTP(email, newOtp);
     const { resetPasswordSubject, resetPasswordDescription } = getResetPasswordMessage(newOtp);
