@@ -5,8 +5,9 @@ const { sendMail } = require("../../utils/EmailService");
 const { generateOTP, storeOTP, verifyOTP } = require("../../utils/OtpService");
 const { FormatDate } = require("../../utils/DateFormate");
 const PromotersModel = require("../../models/promoters/Promoters");
+const { getWelcomeMessage, getResetPasswordMessage } = require("../../utils/EmailMessages");
 
-const recoverySubject = "GirijaKalyana - Password Recovery";
+
 
 const signUp = async (req, res) => {
   try {
@@ -50,7 +51,18 @@ const signUp = async (req, res) => {
       ...otherDetails,
     });
 
+
     await newProfile.save();
+
+try {  
+  const {welcomeMessage,welcomeSubject} = getWelcomeMessage( otherDetails, newRefNo);
+
+  await sendMail(username, welcomeSubject, welcomeMessage);
+} catch (emailError) {
+  console.error(emailError);
+}
+
+
 
     return res.status(201).json({
       success: true,
@@ -166,9 +178,9 @@ const resetPassword = async (req, res) => {
       });
     }
     const newOtp = generateOTP();
-    const resetPasswordDescription = `Dear Member,\n\nYour OTP for password reset is: ${newOtp}\n\nPlease use this OTP to proceed with resetting your password.\n\nPlease keep don't share with anyone.\n\nBest regards,\n Team`;
     storeOTP(email, newOtp);
-    await sendMail(user.username, recoverySubject, resetPasswordDescription);
+    const { resetPasswordSubject, resetPasswordDescription } = getResetPasswordMessage(newOtp);
+    await sendMail(user.username, resetPasswordSubject, resetPasswordDescription);
     return res.json({ success: true, message: "OTP sent to your email" });
   } catch (error) {
     console.error("Error in resetPassword:", error);

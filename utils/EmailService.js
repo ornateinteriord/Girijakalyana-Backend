@@ -8,7 +8,7 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
-const sendMail = async (email, subject, description) => {
+const sendMail = async (email, subject, htmlContent) => {
   if (!email || typeof email !== 'string' || !email.includes('@')) {
     console.error("Invalid or missing recipient email:", email);
     return;
@@ -19,7 +19,7 @@ const sendMail = async (email, subject, description) => {
       from: `"Girijakalyana" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: subject,
-      text: description,
+       html: htmlContent,
     };
 
    
