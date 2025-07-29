@@ -44,8 +44,8 @@ const updateProfile = async (req, res) => {
       try {  
         const {activatedMessage,activatedSubject} = getActiveMessage(profile);
         const {deactivatedMessage,deactivatedSubject} = getDeactiveMessage(profile);
-        const subject = status === 'active' ? activatedSubject : deactivatedSubject;
-        const message = status === 'active' ? activatedMessage : deactivatedMessage;
+        const subject = status !== 'active' ? deactivatedSubject : activatedSubject;
+        const message = status !== 'active' ? deactivatedMessage : activatedMessage;
 
         await sendMail(profile.email_id, subject, message);
       } catch (emailError) {
