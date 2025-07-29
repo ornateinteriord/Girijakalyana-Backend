@@ -4,7 +4,7 @@ const { blurAndGetURL } = require("../utils/ImageBlur");
 const { processUserImages } = require("../utils/SecureImageHandler");
 const BlurredImages = require("../models/blurredImages");
 const { getPaginationParams } = require("../utils/pagination");
-const { getActiveMessage, getDeactiveMessage } = require("../utils/EmailMessages");
+const { getActiveMessage, getDeactiveMessage, getImageVerifiedMessage } = require("../utils/EmailMessages");
 const { sendMail } = require("../utils/EmailService");
 
 // Get profile by registration number
@@ -33,25 +33,68 @@ const getProfileByRegistrationNo = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { registration_no } = req.params;
-    const { _id, image,status, ...others } = req.body;
+    const { _id, image, status,isProfileUpdate,  ...others } = req.body;
+    const oldProfile = await Profile.findOne({ registration_no });
+    const oldImageVerification = oldProfile ? oldProfile.image_verification : undefined;
+
+    // Build update object for both models
+    const profileUpdateObj = { ...others };
+    if (image) profileUpdateObj.image = image;
+    if (typeof status !== 'undefined') profileUpdateObj.status = status;
+
+    const userUpdateObj = { ...others };
+    if (typeof status !== 'undefined') userUpdateObj.status = status;
+
     const profile = await Profile.findOneAndUpdate(
       { registration_no },
-      { $set: { ...others, ...(image && { image }) } },
+      { $set: profileUpdateObj },
       { new: true }
     );
 
-    if( profile){
-      try {  
-        const {activatedMessage,activatedSubject} = getActiveMessage(profile);
-        const {deactivatedMessage,deactivatedSubject} = getDeactiveMessage(profile);
-        const subject = status !== 'active' ? deactivatedSubject : activatedSubject;
-        const message = status !== 'active' ? deactivatedMessage : activatedMessage;
-
-        await sendMail(profile.email_id, subject, message);
-      } catch (emailError) {
-        console.error(emailError);
-      }
+    await UserModel.findOneAndUpdate(
+      { ref_no: registration_no },
+      { $set: userUpdateObj }
+    );
+if (profile) {
+  try {
+    if (
+      typeof oldImageVerification !== 'undefined' &&
+      oldImageVerification === 'pending' &&
+      profile.image_verification === 'active'
+    ) {
+      const { imageVerifiedMessage, imageVerifiedSubject } = getImageVerifiedMessage(profile);
+      await sendMail(profile.email_id, imageVerifiedSubject, imageVerifiedMessage);
     }
+
+    if (
+      status && 
+      oldProfile && 
+      oldProfile.status && 
+      oldProfile.status !== status
+    ) {
+          let subject, message;
+
+          if (isProfileUpdate === true) {
+            const { activatedSubject, activatedMessage } = getActiveMessage(profile);
+            if (!activatedSubject || !activatedMessage) {
+              throw new Error("Activation email content is missing!");
+            }
+            subject = activatedSubject;
+            message = activatedMessage;
+          } else if (isProfileUpdate === false) {
+            const { deactivatedSubject, deactivatedMessage } = getDeactiveMessage(profile);
+            subject = deactivatedSubject;
+            message = deactivatedMessage;
+          }
+
+          if (subject && message) {
+            await sendMail(profile.email_id, subject, message);
+          }
+        }
+  } catch (error) {
+    console.error( error.message); 
+  }
+}
 
     if (!profile) {
       return res.status(404).json({
@@ -81,7 +124,6 @@ const updateProfile = async (req, res) => {
         { upsert: true, new: true }
       );
     }
-
     res.status(200).json({
       success: true,
       data: { profile, user: userUpdate },
@@ -97,6 +139,7 @@ const getAllUserDetails = async (req, res) => {
     const userRole = req.user.user_role;
     const loggedInUserId = req.user.ref_no;
     const { page, pageSize } = getPaginationParams(req);
+    const { image_verification } = req.body;
     const totalRecords = await UserModel.countDocuments({
       ref_no: { $ne: loggedInUserId },
     });
