@@ -5,7 +5,6 @@ const { sendMail } = require("../../utils/EmailService");
 const { generateOTP, storeOTP, verifyOTP } = require("../../utils/OtpService");
 const { FormatDate } = require("../../utils/DateFormate");
 const PromotersModel = require("../../models/promoters/Promoters");
-const { get } = require("mongoose");
 const { getWelcomeMessage, getResetPasswordMessage } = require("../../utils/EmailMessages");
 
 
