@@ -74,7 +74,7 @@ const login = async (req, res) => {
     const promoter = await PromotersModel.findOne({ username });
 
     const authUser = user || promoter;
-    const userType = user ? 'user' : 'promoter';
+    const userType = user ? "user" : "promoter";
 
     if (!authUser) {
       return res.status(400).json({
@@ -90,14 +90,6 @@ const login = async (req, res) => {
       });
     }
 
-    if (authUser.status !== "active") {
-      return res.status(400).json({
-        success: false,
-        message: `Account is ${authUser.status}. Please contact support.`,
-        status: authUser.status,
-        UpdateStatus: authUser.UpdateStatus,
-      });
-    }
 
     authUser.last_loggedin = new Date();
     authUser.counter += 1;
@@ -105,11 +97,14 @@ const login = async (req, res) => {
       req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
     await authUser.save();
 
-    const validUserRoles = ['FreeUser', 'PremiumUser', 'SilverUser', 'Admin'];
-    
-    const tokenUserRole = userType === 'user' 
-      ? (validUserRoles.includes(authUser.user_role) ? authUser.user_role : 'user')
-      : 'promoter';
+    const validUserRoles = ["FreeUser", "PremiumUser", "SilverUser", "Admin"];
+
+    const tokenUserRole =
+      userType === "user"
+        ? validUserRoles.includes(authUser.user_role)
+          ? authUser.user_role
+          : "user"
+        : "promoter";
 
     const token = jwt.sign(
       {
@@ -128,7 +123,10 @@ const login = async (req, res) => {
       user: {
         ...authUser.toObject(),
       },
-      message: "Login successful",
+      message:
+        authUser.status === "active"
+          ? "Login successful"
+          : "Account is pending activation.",
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
