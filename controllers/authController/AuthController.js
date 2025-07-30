@@ -7,11 +7,6 @@ const { FormatDate } = require("../../utils/DateFormate");
 const PromotersModel = require("../../models/promoters/Promoters");
 const { getWelcomeMessage, getResetPasswordMessage, getPostResetPasswordMessage } = require("../../utils/EmailMessages");
 
-const {
-  getWelcomeMessage,
-  getResetPasswordMessage,
-  getPostResetPasswordMessage,
-} = require("../../utils/EmailMessages");
 
 const signUp = async (req, res) => {
   try {
