@@ -8,7 +8,6 @@ const PromotersModel = require("../../models/promoters/Promoters");
 const { getWelcomeMessage, getResetPasswordMessage } = require("../../utils/EmailMessages");
 
 
-
 const signUp = async (req, res) => {
   try {
     const { username, password, user_role, ...otherDetails } = req.body;
@@ -51,31 +50,43 @@ const signUp = async (req, res) => {
       ...otherDetails,
     });
 
-
     await newProfile.save();
 
-try {  
-  const {welcomeMessage,welcomeSubject} = getWelcomeMessage( otherDetails, newRefNo);
+    try {
+      const { welcomeMessage, welcomeSubject } = getWelcomeMessage(otherDetails, newRefNo);
+      await sendMail(username, welcomeSubject, welcomeMessage);
+    } catch (emailError) {
+      console.error("Email error:", emailError);
+    }
 
-  await sendMail(username, welcomeSubject, welcomeMessage);
-} catch (emailError) {
-  console.error(emailError);
-}
+    const validUserRoles = ["FreeUser", "PremiumUser", "SilverUser", "Admin"];
+    const tokenUserRole = validUserRoles.includes(newUser.user_role)
+      ? newUser.user_role
+      : "user";
 
-
+    const token = jwt.sign(
+      {
+        user_role: tokenUserRole,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" }
+    );
 
     return res.status(201).json({
       success: true,
+      token,
       user: newUser,
       profile: newProfile,
       message: "Signup successful",
     });
 
   } catch (error) {
-    console.error("Signup error:", error); 
+    console.error("Signup error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
 
 
 const login = async (req, res) => {
