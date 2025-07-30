@@ -75,8 +75,6 @@ const signUp = async (req, res) => {
     return res.status(201).json({
       success: true,
       token,
-      user: newUser,
-      profile: newProfile,
       message: "Signup successful",
     });
 
