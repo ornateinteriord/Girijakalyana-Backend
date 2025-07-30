@@ -30,6 +30,36 @@ const getProfileByRegistrationNo = async (req, res) => {
   }
 };
 
+const DeleteImage = async (req, res) => {
+  try {
+     const { registration_no } = req.params;
+     const profile = await Profile.findOne({ registration_no });
+
+    if (!registration_no) {
+      return res.status(404).json({
+        success: false,
+        message: "Registration number is required",
+      });
+    }
+    if (!profile.image || profile.image === "") {
+      return res.status(400).json({
+        success: false,
+        message: "No image found to delete for this profile",
+      });
+    }
+     profile.image = ""; 
+     profile.image_verification = "pending"; // Reset image verification status
+    await profile.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Image deleted successfully",
+    });
+  } catch (error) {
+       res.status(500).json({ success: false, message: error.message });
+  }
+}
+
 const updateProfile = async (req, res) => {
   try {
     const { registration_no } = req.params;
@@ -449,4 +479,5 @@ module.exports = {
   changePassword,
   searchUsersByInput,
   getMyMatches,
+  DeleteImage
 };
