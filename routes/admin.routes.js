@@ -28,8 +28,8 @@ router.get("/all-news",authenticateToken, checkRole("Admin"), getAllNews);
 router.post("/add-news",authenticateToken, checkRole("Admin"), addNews);
 router.put("/promoters/:id/status",authenticateToken,checkRole("Admin"),updatePromoterStatus);
 router.get("/dashboard-stats",authenticateToken,checkRole("Admin"),getUserCounts);
-router.post("/assistance-pending",AssistancePending);
-router.post("/assistance-success",assistanceSuccess);
+router.post("/assistance-pending",authenticateToken,checkRole("Admin"),AssistancePending);
+router.post("/assistance-success",authenticateToken,checkRole("Admin"),assistanceSuccess);
 
 
 module.exports = router;
