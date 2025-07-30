@@ -10,6 +10,7 @@ const {
 } = require('../controllers/Transactions/TransactionController');
 const { getAllNews, addNews } = require('../controllers/news/NewsController');
 const { getUserCounts } = require('../controllers/adminController/DashboardStats');
+const { AssistancePending, assistanceSuccess } = require('../controllers/adminController/Assistance');
 
 
 
@@ -27,6 +28,8 @@ router.get("/all-news",authenticateToken, checkRole("Admin"), getAllNews);
 router.post("/add-news",authenticateToken, checkRole("Admin"), addNews);
 router.put("/promoters/:id/status",authenticateToken,checkRole("Admin"),updatePromoterStatus);
 router.get("/dashboard-stats",authenticateToken,checkRole("Admin"),getUserCounts);
+router.post("/assistance-pending",AssistancePending);
+router.post("/assistance-success",assistanceSuccess);
 
 
 module.exports = router;
