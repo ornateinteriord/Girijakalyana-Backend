@@ -25,7 +25,10 @@ const signUp = async (req, res) => {
     ]);
     const newUserId = lastUser.length ? lastUser[0].user_id + 1 : 1;
     const newRefNo = lastUser.length
-      ? `SGM${String(parseInt(lastUser[0].ref_no.slice(3)) + 1).padStart(3, "0")}`
+      ? `SGM${String(parseInt(lastUser[0].ref_no.slice(3)) + 1).padStart(
+          3,
+          "0"
+        )}`
       : "SGM001";
 
     const newUser = new UserModel({
@@ -71,14 +74,24 @@ const signUp = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
     );
+    try {
+      const { welcomeMessage, welcomeSubject } = getWelcomeMessage(
+        otherDetails,
+        newRefNo
+      );
+
+      await sendMail(username, welcomeSubject, welcomeMessage);
+    } catch (emailError) {
+      console.error(emailError);
+    }
 
     return res.status(201).json({
       success: true,
       token,
       message: "Signup successful",
     });
-
   } catch (error) {
+    console.error("Signup error:", error);
     console.error("Signup error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
@@ -110,7 +123,6 @@ const login = async (req, res) => {
         message: "Invalid username or password",
       });
     }
-
 
     authUser.last_loggedin = new Date();
     authUser.counter += 1;
@@ -177,11 +189,11 @@ const resetPassword = async (req, res) => {
       });
     }
 
-
     if (password) {
       user.password = password;
       await user.save();
-      const { resetConfirmSubject, resetConfirmMessage } = getPostResetPasswordMessage();
+      const { resetConfirmSubject, resetConfirmMessage } =
+        getPostResetPasswordMessage();
       await sendMail(user.username, resetConfirmSubject, resetConfirmMessage);
       return res.json({
         success: true,
@@ -192,8 +204,13 @@ const resetPassword = async (req, res) => {
     // Step 3: Initial request, generate and send OTP
     const newOtp = generateOTP();
     storeOTP(email, newOtp);
-    const { resetPasswordSubject, resetPasswordDescription } = getResetPasswordMessage(newOtp);
-    await sendMail(user.username, resetPasswordSubject, resetPasswordDescription);
+    const { resetPasswordSubject, resetPasswordDescription } =
+      getResetPasswordMessage(newOtp);
+    await sendMail(
+      user.username,
+      resetPasswordSubject,
+      resetPasswordDescription
+    );
     return res.json({ success: true, message: "OTP sent to your email" });
   } catch (error) {
     console.error("Error in resetPassword:", error);
@@ -267,8 +284,9 @@ const getDashboardStats = async (req, res) => {
 
 const getRecentRegisters = async (req, res) => {
   try {
-    const recentMembers = await profile.find({})
-      .sort({ _id: -1 }) 
+    const recentMembers = await profile
+      .find({})
+      .sort({ _id: -1 })
       .limit(6)
       .lean()
       .select({
@@ -280,17 +298,15 @@ const getRecentRegisters = async (req, res) => {
         educational_qualification: 1,
         city: 1,
         caste: 1,
-        _id: 0 
+        _id: 0,
       });
 
-    const formattedMembers = recentMembers.map(({ 
-      first_name, 
-      last_name, 
-      ...rest 
-    }) => ({
-      ...rest,
-      name: `${first_name || ''} ${last_name || ''}`.trim()
-    }));
+    const formattedMembers = recentMembers.map(
+      ({ first_name, last_name, ...rest }) => ({
+        ...rest,
+        name: `${first_name || ""} ${last_name || ""}`.trim(),
+      })
+    );
 
     res.status(200).json(formattedMembers);
   } catch (error) {
@@ -306,5 +322,5 @@ module.exports = {
   login,
   resetPassword,
   getDashboardStats,
-  getRecentRegisters
+  getRecentRegisters,
 };

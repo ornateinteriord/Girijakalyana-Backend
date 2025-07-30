@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAllUserProfile, getAllUserDetails, updateProfile } = require('../controllers/profileController');
+const { getAllUserDetails, updateProfile } = require('../controllers/profileController');
 const authenticateToken = require('../middleware/auth.middleware');
 const checkRole = require('../middleware/roles.middleware');
 const { getPromotersTransactions, getPromoters, getPromotersEarnings, updatePromoterStatus } = require('../controllers/promoters/PromotersController');
@@ -9,6 +9,7 @@ const {
   getOnlineAllTransactions
 } = require('../controllers/Transactions/TransactionController');
 const { getAllNews, addNews } = require('../controllers/news/NewsController');
+const { getUserCounts } = require('../controllers/adminController/DashboardStats');
 
 
 
@@ -25,6 +26,7 @@ router.get("/online-transactions", authenticateToken, checkRole("Admin"), getOnl
 router.get("/all-news",authenticateToken, checkRole("Admin"), getAllNews);
 router.post("/add-news",authenticateToken, checkRole("Admin"), addNews);
 router.put("/promoters/:id/status",authenticateToken,checkRole("Admin"),updatePromoterStatus);
+router.get("/dashboard-stats",authenticateToken,checkRole("Admin"),getUserCounts);
 
 
 module.exports = router;
