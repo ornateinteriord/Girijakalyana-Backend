@@ -6,6 +6,7 @@ const { generateOTP, storeOTP, verifyOTP } = require("../../utils/OtpService");
 const { FormatDate } = require("../../utils/DateFormate");
 const PromotersModel = require("../../models/promoters/Promoters");
 const { getWelcomeMessage, getResetPasswordMessage, getPostResetPasswordMessage } = require("../../utils/EmailMessages");
+const { detectPlatform } = require("../../utils/common");
 
 
 const signUp = async (req, res) => {
