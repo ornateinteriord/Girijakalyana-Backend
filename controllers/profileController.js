@@ -417,9 +417,10 @@ const searchUsersByInput = async (req, res) => {
     const processed = await processUserImages(merged, req.user.ref_no, req.user.user_role);
 
     if (!processed || processed.length === 0) {
-      return res.status(404).json({
-        success: false,
+      return res.status(200).json({
+        success: true,
         message: "No users found matching the input.",
+        users: null,
       });
     }
 
