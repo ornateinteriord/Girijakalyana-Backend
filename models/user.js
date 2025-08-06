@@ -15,7 +15,8 @@ const UserSchema = new mongoose.Schema({
   UpdateStatus: { type: String,default: "not updated" },
   counter: { type: Number, default: 0 },
   last_loggedin: { type: String }, 
-  loggedin_from: { type: String },
+  loggedin_from: { type: String }, // IP address
+  loggedin_platform: { type: String }, // "mobile", "desktop", etc.
   mobile_no: { type: String }
 }, { timestamps: true, collection: "user_tbl" });
 
