@@ -125,8 +125,8 @@ const login = async (req, res) => {
 
     authUser.last_loggedin = new Date();
     authUser.counter += 1;
-    authUser.loggedin_from =
-      req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+    authUser.loggedin_from = req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+    authUser.loggedin_platform = detectPlatform(req.headers['user-agent']);
     await authUser.save();
 
     const validUserRoles = ["FreeUser", "PremiumUser", "SilverUser", "Admin"];
