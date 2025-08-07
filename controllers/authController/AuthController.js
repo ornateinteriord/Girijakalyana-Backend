@@ -153,6 +153,9 @@ const login = async (req, res) => {
     return res.status(200).json({
       success: true,
       token,
+      user: {
+        status : authUser.status,
+      },
       message:
         authUser.status === "active"
           ? "Login successful"
