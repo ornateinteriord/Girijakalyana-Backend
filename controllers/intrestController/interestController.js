@@ -1,7 +1,6 @@
 const asyncHandler = require("express-async-handler");
 const Interest = require("../../models/Intrest/Intrest");
 const Profile = require("../../models/profile");
-const profile = require("../../models/profile");
 const { processUserImages } = require("../../utils/SecureImageHandler");
 const { getPaginationParams } = require("../../utils/pagination");
 
