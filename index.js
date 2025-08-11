@@ -6,6 +6,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
 const userRoutes = require('./routes/user.routes');
+const ImageKit = require('imagekit');
 const projectName = process.env.PROJECT_NAME
 
 const app = express();
@@ -16,6 +17,12 @@ app.use(cors({
   credentials: true 
 }));
 
+const imagekit = new ImageKit({
+  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+});
+
 
 
 
@@ -24,6 +31,11 @@ connectDB();
 
 // Middleware
 app.use(express.json());
+
+app.get("/image-kit-auth", (_req, res) => {
+  const result = imagekit.getAuthenticationParameters();
+  res.send(result);
+});
 
 // Routes
 app.use('/api/auth', authRoutes);

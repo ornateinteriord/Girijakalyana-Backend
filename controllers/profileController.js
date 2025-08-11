@@ -147,7 +147,7 @@ if (profile) {
     }
 
     if (image) {
-      const blurredUrl = await blurAndGetURL(image); // generate blurred image
+      const blurredUrl = await blurAndGetURL(image, registration_no); // generate blurred image
       await BlurredImages.findOneAndUpdate(
         { user_id: profile.registration_no },
         { $set: { blurredImage: blurredUrl } },
