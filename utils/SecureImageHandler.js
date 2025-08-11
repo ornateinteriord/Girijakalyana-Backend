@@ -24,7 +24,7 @@ const processUserImages = async (userDetails, loggedInUserRefNo, userRole) => {
             return existingBlur.blurredImage;
           }
 
-          const blurredUrl = await blurAndGetURL(user.image);
+          const blurredUrl = await blurAndGetURL(user.image, user.registration_no);
 
           await BlurredImages.findOneAndUpdate(
             { user_id: user.registration_no },
