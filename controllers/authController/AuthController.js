@@ -176,7 +176,20 @@ const resetPassword = async (req, res) => {
         .json({ success: false, message: "Email not registered" });
     }
 
-    // Step 1: OTP verification only
+    // Step 1: Initial request - generate and send OTP (only email provided)
+    if (!otp && !password) {
+      const newOtp = generateOTP();
+      storeOTP(email, newOtp);
+      const { resetPasswordSubject, resetPasswordDescription } =
+        getResetPasswordMessage(newOtp);
+      await sendMail(
+        user.username,
+        resetPasswordSubject,
+        resetPasswordDescription
+      );
+      return res.json({ success: true, message: "OTP sent to your email" });
+    }
+
     if (otp && !password) {
       if (!verifyOTP(email, otp)) {
         return res
@@ -189,9 +202,18 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    if (password) {
+    if (password && otp) {
+      if (!verifyOTP(email, otp)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid OTP or expired" });
+      }
+      
       user.password = password;
       await user.save();
+
+      clearOTP(email);
+      
       const { resetConfirmSubject, resetConfirmMessage } =
         getPostResetPasswordMessage();
       await sendMail(user.username, resetConfirmSubject, resetConfirmMessage);
@@ -201,17 +223,12 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    // Step 3: Initial request, generate and send OTP
-    const newOtp = generateOTP();
-    storeOTP(email, newOtp);
-    const { resetPasswordSubject, resetPasswordDescription } =
-      getResetPasswordMessage(newOtp);
-    await sendMail(
-      user.username,
-      resetPasswordSubject,
-      resetPasswordDescription
-    );
-    return res.json({ success: true, message: "OTP sent to your email" });
+ 
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request parameters"
+    });
+
   } catch (error) {
     console.error("Error in resetPassword:", error);
     res.status(500).json({ success: false, message: error.message });
