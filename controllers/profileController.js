@@ -169,6 +169,7 @@ const getAllUserDetails = async (req, res) => {
     const userRole = req.user.user_role;
     const loggedInUserId = req.user.ref_no;
     const { page, pageSize } = getPaginationParams(req);
+    const { image_verification } = req.body;
     const totalRecords = await UserModel.countDocuments({
       ref_no: { $ne: loggedInUserId },
     });
@@ -204,25 +205,14 @@ const getAllUserDetails = async (req, res) => {
         $addFields: {
           mobile_no: userRole === "FreeUser" ? null : "$mobile_no",
           email_id: userRole === "FreeUser" ? null : "$email_id",
-          // Extract numeric part and convert to number for sorting
-          registrationNumber: {
-            $toInt: {
-              $substrCP: [
-                "$registration_no",
-                3, // Assuming "SGM" prefix is always 3 characters
-                { $strLenCP: "$registration_no" }
-              ]
-            }
-          }
         },
       },
-      { $sort: { registrationNumber: 1 } }, // Sort by the numeric value first
       {
         $project: {
           profile: 0,
-          registrationNumber: 0 // Remove temporary field after sorting
         },
       },
+      { $sort: { registration_no: 1 } },
       { $skip: page * pageSize },
       { $limit: pageSize },
     ]);
