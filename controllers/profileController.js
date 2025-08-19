@@ -406,6 +406,7 @@ const searchUsersByInput = async (req, res) => {
         ...profile.toObject(),
         user_role: user.type_of_user,
         mobile_no,
+        status: user.status,
         image: profile.image,
         image_verification: profile.image_verification,
         secure_image: profile.secure_image,
