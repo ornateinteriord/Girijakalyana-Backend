@@ -169,7 +169,6 @@ const getAllUserDetails = async (req, res) => {
     const userRole = req.user.user_role;
     const loggedInUserId = req.user.ref_no;
     const { page, pageSize } = getPaginationParams(req);
-    const { image_verification } = req.body;
     const totalRecords = await UserModel.countDocuments({
       ref_no: { $ne: loggedInUserId },
     });
@@ -208,9 +207,12 @@ const getAllUserDetails = async (req, res) => {
         },
       },
       {
-        $project: {
-          profile: 0,
-        },
+        $project: userRole?.toLowerCase() === "admin"
+          ? { profile: 0 } 
+          : {
+              profile: 0,
+              password: 0 
+            }
       },
       { $sort: { registration_no: 1 } },
       { $skip: page * pageSize },
@@ -303,6 +305,12 @@ const getMyMatches = async (req, res) => {
           image_verification: "$image_verification",
           secure_image: "$secure_image",
         },
+      },
+      {
+        $project: {
+          "user.password": 0, // Exclude password field
+          "password": 0      // Exclude any password field at root level
+        }
       },
       { $sort: { registration_no: 1 } },
       { $skip: page * pageSize },
@@ -402,7 +410,8 @@ const searchUsersByInput = async (req, res) => {
         mobile_no = null;
         email_id = null;
       }
-      return {
+       // Create base object without password
+      const mergedObject = {
         ...profile.toObject(),
         user_role: user.type_of_user,
         mobile_no,
@@ -413,6 +422,12 @@ const searchUsersByInput = async (req, res) => {
         email_id,
         ref_no: profile.registration_no,
       };
+
+      if (req.user.user_role?.toLowerCase() === "admin") {
+        mergedObject.password = user.password;
+      }
+
+      return mergedObject;
     });
 
     const processed = await processUserImages(merged, req.user.ref_no, req.user.user_role);
