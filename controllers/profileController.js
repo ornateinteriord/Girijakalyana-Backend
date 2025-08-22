@@ -299,8 +299,6 @@ const getMyMatches = async (req, res) => {
       }
     }
 
-    console.log(orFilters)
-
     // ✅ Only build filter when orFilters is non-empty
    const filter = {
       registration_no: { $ne: userRegNo },
