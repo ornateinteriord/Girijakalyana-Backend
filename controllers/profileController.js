@@ -247,6 +247,7 @@ const getMyMatches = async (req, res) => {
         message: "Profile not found for current user.",
       });
     }
+
     const orFilters = [];
     if (
       myProfile.from_age_preference != null &&
@@ -270,28 +271,50 @@ const getMyMatches = async (req, res) => {
     if (myProfile.caste_preference) {
       orFilters.push({ caste: myProfile.caste_preference });
     }
+
+    // ✅ If no preferences → return empty results right away
+    const { page, pageSize } = getPaginationParams(req);
+    if (orFilters.length === 0) {
+      return res.status(200).json({
+        success: true,
+        content: [],
+        currentPage: page,
+        pageSize,
+        totalRecords: 0,
+      });
+    }
+
+    // Gender filter
     let genderFilter = {};
     if (myProfile.gender) {
-      if (myProfile.gender.toLowerCase() === "bride") {
-        genderFilter.gender = { $regex: /^bridegroom$/i };
-      } else if (myProfile.gender.toLowerCase() === "bridegroom") {
-        genderFilter.gender = { $regex: /^bride$/i };
+      const oppositeGenderMap = {
+        bride: "bridegroom",
+        bridegroom: "bride",
+        male: "female",
+        female: "male",
+      };
+      const preferredGender = oppositeGenderMap[myProfile.gender.toLowerCase()];
+      if (preferredGender) {
+        genderFilter.gender = { $regex: new RegExp(`^${preferredGender}$`, "i") };
       }
     }
 
-    const filter = {
+    // ✅ Only build filter when orFilters is non-empty
+   const filter = {
       registration_no: { $ne: userRegNo },
       ...genderFilter,
-      ...(orFilters.length > 0 ? { $or: orFilters } : {}),
     };
 
-    const { page, pageSize } = getPaginationParams(req);
+    if (orFilters.length > 0) {
+      filter.$or = orFilters;
+    }
     const totalRecords = await Profile.countDocuments(filter);
+
     let matches = await Profile.aggregate([
       { $match: filter },
       {
         $lookup: {
-          from: "user_tbl", // join user data to get `ref_no`
+          from: "user_tbl",
           localField: "registration_no",
           foreignField: "ref_no",
           as: "user",
@@ -300,7 +323,7 @@ const getMyMatches = async (req, res) => {
       { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
       {
         $addFields: {
-          ref_no: "$user.ref_no", // this is crucial!
+          ref_no: "$user.ref_no",
           image: "$image",
           image_verification: "$image_verification",
           secure_image: "$secure_image",
@@ -308,9 +331,9 @@ const getMyMatches = async (req, res) => {
       },
       {
         $project: {
-          "user.password": 0, // Exclude password field
-          "password": 0      // Exclude any password field at root level
-        }
+          "user.password": 0,
+          password: 0,
+        },
       },
       { $sort: { registration_no: 1 } },
       { $skip: page * pageSize },
@@ -337,13 +360,14 @@ const getMyMatches = async (req, res) => {
       success: true,
       content: matches,
       currentPage: page,
-      pageSize: pageSize,
-      totalRecords: totalRecords,
+      pageSize,
+      totalRecords,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
 const searchUsersByInput = async (req, res) => {
   try {
     const { input } = req.query;
