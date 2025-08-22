@@ -268,60 +268,116 @@ const getMyMatches = async (req, res) => {
     const userRegNo = req.user.ref_no;
     const { page = 0, pageSize = 10 } = getPaginationParams(req);
 
-    const myProfile = await Profile.findOne({ registration_no: userRegNo }, {
-      gender: 1, from_age_preference: 1, to_age_preference: 1,
-      from_height_preference: 1, to_height_preference: 1, caste_preference: 1
-    }).lean();
+    const myProfile = await Profile.findOne({ registration_no: userRegNo }).lean();
 
     if (!myProfile) {
       return res.status(404).json({
-        success: false, message: "Profile not found for current user."
+        success: false,
+        message: "Profile not found for current user."
       });
     }
 
     // Build match criteria
     const matchCriteria = {
       registration_no: { $ne: userRegNo },
-      ...(myProfile.gender && {
-        gender: new RegExp(`^${
-          {bride: "bridegroom", bridegroom: "bride", male: "female", female: "male"}
-          [myProfile.gender.toLowerCase()]
-        }$`, "i")
-      }),
-      ...(myProfile.from_age_preference && myProfile.to_age_preference && {
-        age: { $gte: myProfile.from_age_preference, $lte: myProfile.to_age_preference }
-      }),
-      ...(myProfile.from_height_preference && myProfile.to_height_preference && {
-        height: { $gte: myProfile.from_height_preference, $lte: myProfile.to_height_preference }
-      }),
-      ...(myProfile.caste_preference && { caste: myProfile.caste_preference })
+      status: "active"
     };
 
-    // Parallel execution of count and matches
+    // Add gender filter with proper case handling
+    if (myProfile.gender) {
+      const genderMap = {
+        bride: "bridegroom",
+        bridegroom: "bride",
+        male: "female",
+        female: "male"
+      };
+      const oppositeGender = genderMap[myProfile.gender.toLowerCase()];
+      if (oppositeGender) {
+        matchCriteria.gender = new RegExp(`^${oppositeGender}$`, "i");
+      }
+    }
+
+    // Add age filter
+    if (myProfile.from_age_preference && myProfile.to_age_preference) {
+      matchCriteria.age = {
+        $gte: parseInt(myProfile.from_age_preference),
+        $lte: parseInt(myProfile.to_age_preference)
+      };
+    }
+
+    // Add height filter - using numeric values only for comparison
+    if (myProfile.from_height_preference && myProfile.to_height_preference) {
+      const extractCm = (heightStr) => {
+        const match = heightStr.match(/(\d+)cm/);
+        return match ? parseInt(match[1]) : null;
+      };
+
+      const fromCm = extractCm(myProfile.from_height_preference);
+      const toCm = extractCm(myProfile.to_height_preference);
+
+      if (fromCm && toCm) {
+        matchCriteria.height = {
+          $regex: new RegExp(`(${fromCm}|${toCm})cm`)
+        };
+      }
+    }
+
+    // Add caste filter if not "any"
+    if (myProfile.caste_preference && 
+        !myProfile.caste_preference.toLowerCase().includes('any')) {
+      matchCriteria.caste = myProfile.caste_preference;
+    }
+
     const [totalRecords, matches] = await Promise.all([
       Profile.countDocuments(matchCriteria),
       Profile.aggregate([
         { $match: matchCriteria },
-        { $skip: page * pageSize },
-        { $limit: pageSize },
         {
           $lookup: {
             from: "user_tbl",
             localField: "registration_no",
             foreignField: "ref_no",
-            as: "user",
-            pipeline: [{ $project: { password: 0, _id: 0 } }]
+            as: "user"
           }
         },
-        { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+        { $unwind: "$user" },
         {
           $addFields: {
-            user_details: "$user",
-            mobile_no: req.user.user_role === "FreeUser" ? null : "$mobile_no",
-            email_id: req.user.user_role === "FreeUser" ? null : "$email_id",
-            ref_no: "$user.ref_no"
+            user_details: {
+              user_role: "$user.user_role",
+              status: "$user.status",
+              UpdateStatus: "$user.UpdateStatus",
+              counter: "$user.counter",
+              last_loggedin: "$user.last_loggedin",
+              ref_no: "$user.ref_no"
+            },
+            mobile_no: {
+              $cond: [
+                { $eq: [req.user.user_role, "FreeUser"] },
+                null,
+                "$mobile_no"
+              ]
+            },
+            email_id: {
+              $cond: [
+                { $eq: [req.user.user_role, "FreeUser"] },
+                null,
+                "$email_id"
+              ]
+            }
           }
-        }
+        },
+        {
+          $project: {
+            _id: 0,
+            password: 0,
+            user: 0,
+            __v: 0
+          }
+        },
+        { $sort: { registration_no: 1 } },
+        { $skip: page * pageSize },
+        { $limit: pageSize }
       ]).exec()
     ]);
 
@@ -332,14 +388,28 @@ const getMyMatches = async (req, res) => {
       content: processedMatches,
       currentPage: page,
       pageSize,
-      totalRecords
+      totalRecords,
+      appliedFilters: {
+        preferences: {
+          age: {
+            from: myProfile?.from_age_preference,
+            to: myProfile?.to_age_preference
+          },
+          height: {
+            from: myProfile?.from_height_preference,
+            to: myProfile?.to_height_preference
+          },
+          caste: myProfile?.caste_preference,
+          education : myProfile?.education_preference
+        }
+      }
     });
 
   } catch (error) {
-    console.error('getMyMatches error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: "An error occurred while fetching matches"
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while fetching matches",
+      error: error.message
     });
   }
 };
