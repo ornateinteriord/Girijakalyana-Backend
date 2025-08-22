@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Add these indexes to your Profile schema
 const ProfileSchema = new mongoose.Schema({
   registration_no: { type: String, required: true, unique: true },
   registration_date: String,
@@ -73,5 +74,11 @@ const ProfileSchema = new mongoose.Schema({
   boosted_on: String,
   otherInfo: String,
 }, { collection: 'registration_tbl' }); 
+
+// Add compound indexes for commonly queried fields
+ProfileSchema.index({ registration_no: 1, gender: 1 });
+ProfileSchema.index({ age: 1 });
+ProfileSchema.index({ height: 1 });
+ProfileSchema.index({ caste: 1 });
 
 module.exports = mongoose.model('Profile', ProfileSchema);
