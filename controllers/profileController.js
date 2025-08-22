@@ -166,205 +166,181 @@ if (profile) {
 
 const getAllUserDetails = async (req, res) => {
   try {
-    const userRole = req.user.user_role;
-    const loggedInUserId = req.user.ref_no;
+    const { user_role: userRole, ref_no: loggedInUserId } = req.user;
     const { page, pageSize } = getPaginationParams(req);
-    const totalRecords = await UserModel.countDocuments({
-      ref_no: { $ne: loggedInUserId },
-    });
 
-    let userDetails = await UserModel.aggregate([
+    // Using facet for single database call
+    const [{ metadata, data }] = await UserModel.aggregate([
       {
-        $match: {
-          ref_no: { $ne: loggedInUserId },
-        },
-      },
-      {
-        $lookup: {
-          from: "registration_tbl",
-          localField: "ref_no",
-          foreignField: "registration_no",
-          as: "profile",
-        },
-      },
-      {
-        $unwind: {
-          path: "$profile",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $replaceRoot: {
-          newRoot: {
-            $mergeObjects: ["$$ROOT", "$profile", { profile: "$profile" }],
-          },
-        },
-      },
-      {
-        $addFields: {
-          mobile_no: userRole === "FreeUser" ? null : "$mobile_no",
-          email_id: userRole === "FreeUser" ? null : "$email_id",
-        },
-      },
-      {
-        $project: userRole?.toLowerCase() === "admin"
-          ? { profile: 0 } 
-          : {
-              profile: 0,
-              password: 0 
-            }
-      },
-      { $sort: { registration_no: 1 } },
-      { $skip: page * pageSize },
-      { $limit: pageSize },
-    ]);
+        $facet: {
+          metadata: [
+            { $match: { ref_no: { $ne: loggedInUserId } } },
+            { $count: 'totalRecords' }
+          ],
+          data: [
+            { $match: { ref_no: { $ne: loggedInUserId } } },
+            {
+              $lookup: {
+                from: 'registration_tbl',
+                localField: 'ref_no',
+                foreignField: 'registration_no',
+                as: 'profileData'
+              }
+            },
+            { $unwind: '$profileData' },
+            {
+              $addFields: {
+                mobile_no: {
+                  $cond: [
+                    { $eq: [userRole, 'FreeUser'] },
+                    null,
+                    '$profileData.mobile_no'
+                  ]
+                },
+                email_id: {
+                  $cond: [
+                    { $eq: [userRole, 'FreeUser'] },
+                    null,
+                    '$profileData.email_id'
+                  ]
+                }
+              }
+            },
+            {
+              $replaceRoot: {
+                newRoot: {
+                  $mergeObjects: [
+                    '$$ROOT',
+                    '$profileData',
+                    {
+                      user_role: '$user_role',
+                      status: '$status',
+                      UpdateStatus: '$UpdateStatus',
+                      counter: '$counter',
+                      last_loggedin: '$last_loggedin',
+                      ref_no: '$ref_no'
+                    }
+                  ]
+                }
+              }
+            },
+            { 
+              $project: { 
+                password: 0,
+                profileData: 0,
+                _id: 0,
+                __v: 0
+              } 
+            },
+            { $sort: { registration_no: 1 } },
+            { $skip: page * pageSize },
+            { $limit: pageSize }
+          ]
+        }
+      }
+    ]).exec();
 
-    userDetails = await processUserImages(
-      userDetails,
+    const userDetails = await processUserImages(
+      data,
       loggedInUserId,
       userRole
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       content: userDetails,
       currentPage: page,
-      pageSize: pageSize,
-      totalRecords: totalRecords,
+      pageSize,
+      totalRecords: metadata?.[0]?.totalRecords || 0
     });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('getAllUserDetails error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch user details' 
+    });
   }
 };
 
 const getMyMatches = async (req, res) => {
   try {
     const userRegNo = req.user.ref_no;
-    const myProfile = await Profile.findOne({ registration_no: userRegNo });
+    const { page = 0, pageSize = 10 } = getPaginationParams(req);
+
+    const myProfile = await Profile.findOne({ registration_no: userRegNo }, {
+      gender: 1, from_age_preference: 1, to_age_preference: 1,
+      from_height_preference: 1, to_height_preference: 1, caste_preference: 1
+    }).lean();
+
     if (!myProfile) {
       return res.status(404).json({
-        success: false,
-        message: "Profile not found for current user.",
+        success: false, message: "Profile not found for current user."
       });
     }
 
-    const orFilters = [];
-    if (
-      myProfile.from_age_preference != null &&
-      myProfile.to_age_preference != null
-    ) {
-      orFilters.push({
-        age: {
-          $gte: myProfile.from_age_preference,
-          $lte: myProfile.to_age_preference,
-        },
-      });
-    }
-    if (myProfile.from_height_preference && myProfile.to_height_preference) {
-      orFilters.push({
-        height: {
-          $gte: myProfile.from_height_preference,
-          $lte: myProfile.to_height_preference,
-        },
-      });
-    }
-    if (myProfile.caste_preference) {
-      orFilters.push({ caste: myProfile.caste_preference });
-    }
-
-    // ✅ If no preferences → return empty results right away
-    const { page, pageSize } = getPaginationParams(req);
-    if (orFilters.length === 0) {
-      return res.status(200).json({
-        success: true,
-        content: [],
-        currentPage: page,
-        pageSize,
-        totalRecords: 0,
-      });
-    }
-
-    // Gender filter
-    let genderFilter = {};
-    if (myProfile.gender) {
-      const oppositeGenderMap = {
-        bride: "bridegroom",
-        bridegroom: "bride",
-        male: "female",
-        female: "male",
-      };
-      const preferredGender = oppositeGenderMap[myProfile.gender.toLowerCase()];
-      if (preferredGender) {
-        genderFilter.gender = { $regex: new RegExp(`^${preferredGender}$`, "i") };
-      }
-    }
-
-    // ✅ Only build filter when orFilters is non-empty
-   const filter = {
+    // Build match criteria
+    const matchCriteria = {
       registration_no: { $ne: userRegNo },
-      ...genderFilter,
+      ...(myProfile.gender && {
+        gender: new RegExp(`^${
+          {bride: "bridegroom", bridegroom: "bride", male: "female", female: "male"}
+          [myProfile.gender.toLowerCase()]
+        }$`, "i")
+      }),
+      ...(myProfile.from_age_preference && myProfile.to_age_preference && {
+        age: { $gte: myProfile.from_age_preference, $lte: myProfile.to_age_preference }
+      }),
+      ...(myProfile.from_height_preference && myProfile.to_height_preference && {
+        height: { $gte: myProfile.from_height_preference, $lte: myProfile.to_height_preference }
+      }),
+      ...(myProfile.caste_preference && { caste: myProfile.caste_preference })
     };
 
-    if (orFilters.length > 0) {
-      filter.$or = orFilters;
-    }
-    const totalRecords = await Profile.countDocuments(filter);
-
-    let matches = await Profile.aggregate([
-      { $match: filter },
-      {
-        $lookup: {
-          from: "user_tbl",
-          localField: "registration_no",
-          foreignField: "ref_no",
-          as: "user",
+    // Parallel execution of count and matches
+    const [totalRecords, matches] = await Promise.all([
+      Profile.countDocuments(matchCriteria),
+      Profile.aggregate([
+        { $match: matchCriteria },
+        { $skip: page * pageSize },
+        { $limit: pageSize },
+        {
+          $lookup: {
+            from: "user_tbl",
+            localField: "registration_no",
+            foreignField: "ref_no",
+            as: "user",
+            pipeline: [{ $project: { password: 0, _id: 0 } }]
+          }
         },
-      },
-      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-      {
-        $addFields: {
-          ref_no: "$user.ref_no",
-          image: "$image",
-          image_verification: "$image_verification",
-          secure_image: "$secure_image",
-        },
-      },
-      {
-        $project: {
-          "user.password": 0,
-          password: 0,
-        },
-      },
-      { $sort: { registration_no: 1 } },
-      { $skip: page * pageSize },
-      { $limit: pageSize },
+        { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+        {
+          $addFields: {
+            user_details: "$user",
+            mobile_no: req.user.user_role === "FreeUser" ? null : "$mobile_no",
+            email_id: req.user.user_role === "FreeUser" ? null : "$email_id",
+            ref_no: "$user.ref_no"
+          }
+        }
+      ]).exec()
     ]);
 
-    matches = matches.map((profile) => {
-      let mobile_no = profile.mobile_no;
-      let email_id = profile.email_id;
-      if (req.user.user_role === "FreeUser") {
-        mobile_no = null;
-        email_id = null;
-      }
-      return {
-        ...profile,
-        mobile_no,
-        email_id,
-      };
-    });
+    const processedMatches = await processUserImages(matches, userRegNo, req.user.user_role);
 
-    matches = await processUserImages(matches, userRegNo, req.user.user_role);
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      content: matches,
+      content: processedMatches,
       currentPage: page,
       pageSize,
-      totalRecords,
+      totalRecords
     });
+
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('getMyMatches error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "An error occurred while fetching matches"
+    });
   }
 };
 
