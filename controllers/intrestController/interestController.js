@@ -31,9 +31,9 @@ const expressInterest = asyncHandler(async (req, res) => {
   });
 
   if (existingInterest) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       message: "Interest already exists",
-      existingInterest 
+      existingInterest
     });
   }
 
@@ -149,7 +149,7 @@ const getSentInterests = asyncHandler(async (req, res) => {
 
     recipientProfiles = await processUserImages(recipientProfiles, loggedInUserId, senderRole);
 
-  
+
     const populatedInterests = paginatedInterests.map((interest) => {
       const recipientProfile = recipientProfiles.find(
         (p) => p.registration_no === interest.recipient
@@ -176,38 +176,70 @@ const getSentInterests = asyncHandler(async (req, res) => {
 
 const cancelInterestRequest = asyncHandler(async (req, res) => {
   try {
-    const { sender, recipient } = req.body;
+    const { sender, recipient, isConnectionRemove = false } = req.body;
 
-   
     if (!sender || !recipient) {
-      res.status(400);
-      throw new Error("Both sender and recipient registration numbers are required");
+      return res.status(400).json({
+        success: false,
+        message: "Both sender and recipient registration numbers are required"
+      });
     }
 
+    let deletedRecord;
 
-    const deletedRequest = await Interest.findOneAndDelete({
+    if (isConnectionRemove) {
+      // Delete accepted connection
+      deletedRecord = await Interest.findOneAndDelete({
+        sender,
+        recipient,
+        status: "accepted"
+      });
+
+      if (!deletedRecord) {
+        return res.status(404).json({
+          success: false,
+          message: "Accepted connection not found or already removed"
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Connection successfully removed",
+        data: {
+          sender: deletedRecord.sender,
+          recipient: deletedRecord.recipient,
+          deletedAt: new Date()
+        }
+      });
+    }
+
+    // Otherwise, delete pending request
+    deletedRecord = await Interest.findOneAndDelete({
       sender,
       recipient,
-      status: 'pending' // Only allow deletion of pending requests
+      status: "pending"
     });
 
-    if (!deletedRequest) {
-      res.status(404);
-      throw new Error("Interest request not found, already processed, or you don't have permission to cancel it");
+    if (!deletedRecord) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Interest request not found, already processed, or you don't have permission to cancel it"
+      });
     }
 
-    res.status(200).json({ 
+    return res.status(200).json({
       success: true,
       message: "Interest request successfully cancelled",
       data: {
-        sender: deletedRequest.sender,
-        recipient: deletedRequest.recipient,
+        sender: deletedRecord.sender,
+        recipient: deletedRecord.recipient,
         deletedAt: new Date()
       }
     });
-
   } catch (error) {
-     res.status(500).json({ success: false, message: error.message });
+    console.error("Cancel Interest Error:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -225,26 +257,26 @@ const getInterestStatus = asyncHandler(async (req, res) => {
       { sender, recipient },
       { sender: recipient, recipient: sender }
     ]
-  }).populate('sender recipient'); 
+  }).populate('sender recipient');
 
- 
+
 
   if (!interest) {
     return res.status(200).json({ status: "none" });
-   
+
   }
- 
+
   res.status(200).json({
-  data:{
-    status: interest.status,
-    interestId: interest._id,
-    message: interest.message,
-    senderProfile: interest.sender, 
-    recipientProfile: interest.recipient,
-    isSender: interest.sender === sender
-  }
+    data: {
+      status: interest.status,
+      interestId: interest._id,
+      message: interest.message,
+      senderProfile: interest.sender,
+      recipientProfile: interest.recipient,
+      isSender: interest.sender === sender
+    }
   });
-  
+
 });
 
 
@@ -287,7 +319,7 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
     const loggedInUserId = req.user.ref_no;
 
     if (!recipient) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         message: "Recipient registration number is required"
       });
@@ -343,24 +375,24 @@ const getInterestCounts = asyncHandler(async (req, res) => {
   const { registrationNo } = req.params;
 
   if (!registrationNo) {
-    return res.status(400).json({ 
-      message: "Registration number is required" 
+    return res.status(400).json({
+      message: "Registration number is required"
     });
   }
 
   try {
 
     const [receivedCount, sentCount, acceptedCount] = await Promise.all([
-     
+
       Interest.countDocuments({
         recipient: registrationNo,
         status: 'pending'
       }),
-      
-  
-      Interest.countDocuments({ 
+
+
+      Interest.countDocuments({
         sender: registrationNo,
-        status: "pending" 
+        status: "pending"
       }),
 
       Interest.countDocuments({
@@ -375,9 +407,9 @@ const getInterestCounts = asyncHandler(async (req, res) => {
       accepted: acceptedCount
     });
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Error fetching interest counts",
-      error: error.message 
+      error: error.message
     });
   }
 });
@@ -388,8 +420,8 @@ const getAcceptedConnections = asyncHandler(async (req, res) => {
     const userRole = req.user.user_role;
 
     if (!userId) {
-      return res.status(400).json({ 
-        message: "User registration number is required" 
+      return res.status(400).json({
+        message: "User registration number is required"
       });
     }
 
@@ -412,12 +444,12 @@ const getAcceptedConnections = asyncHandler(async (req, res) => {
         { recipient: userId, status: 'accepted' }
       ]
     })
-    .sort({ updatedAt: -1 }) // Newest first
-    .skip(skip)
-    .limit(pageSize);
+      .sort({ updatedAt: -1 }) // Newest first
+      .skip(skip)
+      .limit(pageSize);
 
     // Get all needed profile IDs in one go
-    const profileIds = acceptedConnections.map(conn => 
+    const profileIds = acceptedConnections.map(conn =>
       conn.sender === userId ? conn.recipient : conn.sender
     );
 
@@ -434,7 +466,7 @@ const getAcceptedConnections = asyncHandler(async (req, res) => {
     const connections = acceptedConnections.map(connection => {
       const isSender = connection.sender === userId;
       const otherUserId = isSender ? connection.recipient : connection.sender;
-      const otherUserProfile = profiles.find(profile => 
+      const otherUserProfile = profiles.find(profile =>
         profile.registration_no === otherUserId
       );
 
@@ -455,10 +487,10 @@ const getAcceptedConnections = asyncHandler(async (req, res) => {
     });
 
   } catch (error) {
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: "Error fetching connections",
-      error: error.message 
+      error: error.message
     });
   }
 });
