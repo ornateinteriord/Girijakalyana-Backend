@@ -13,6 +13,7 @@ router.post('/all-users-profiles', authenticateToken, getAllUserDetails);
 router.post("/interest", authenticateToken, expressInterest);
 router.post("/interest/sent/:sender",authenticateToken,  getSentInterests);
 router.delete('/cancel',authenticateToken, cancelInterestRequest);
+router.delete('/remove-connection',authenticateToken, cancelInterestRequest);
 
 router.get("/interest/status/:sender/:recipient", authenticateToken, getInterestStatus);
 router.put("/interest/:registration_no", authenticateToken, updateInterestStatus);
