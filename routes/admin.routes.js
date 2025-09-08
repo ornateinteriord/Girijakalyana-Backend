@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAllUserDetails, updateProfile, searchUsersByInput } = require('../controllers/profileController');
+const { getAllUserDetails, updateProfile, searchUsersByInput, getAllUserImageVerification } = require('../controllers/profileController');
 const authenticateToken = require('../middleware/auth.middleware');
 const checkRole = require('../middleware/roles.middleware');
 const { getPromotersTransactions, getPromoters, getPromotersEarnings, updatePromoterStatus } = require('../controllers/promoters/PromotersController');
@@ -31,6 +31,7 @@ router.get("/dashboard-stats",authenticateToken,checkRole("Admin"),getUserCounts
 router.post("/assistance-pending",authenticateToken,checkRole("Admin"),AssistancePending);
 router.post("/assistance-success",authenticateToken,checkRole("Admin"),assistanceSuccess);
 router.get("/search",authenticateToken,checkRole("Admin"), searchUsersByInput);
+router.post("/image-verification",authenticateToken,checkRole("Admin"), getAllUserImageVerification);
 
 
 module.exports = router;

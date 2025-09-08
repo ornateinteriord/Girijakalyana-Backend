@@ -561,6 +561,107 @@ const searchUsersByInput = async (req, res) => {
 };
 
 
+const getAllUserImageVerification = async (req, res) => {
+  try {
+    const { user_role: userRole, ref_no: loggedInUserId } = req.user;
+    const { page, pageSize } = getPaginationParams(req);
+
+    const [{ metadata, data }] = await UserModel.aggregate([
+      {
+        $facet: {
+          metadata: [
+            {
+              $lookup: {
+                from: "registration_tbl",
+                localField: "ref_no",
+                foreignField: "registration_no",
+                as: "profileData"
+              }
+            },
+            { $unwind: "$profileData" },
+            {
+              $match: {
+                "profileData.image_verification": "pending"
+              }
+            },
+            { $count: "totalRecords" }
+          ],
+          data: [
+            {
+              $lookup: {
+                from: "registration_tbl",
+                localField: "ref_no",
+                foreignField: "registration_no",
+                as: "profileData"
+              }
+            },
+            { $unwind: "$profileData" },
+            {
+              $match: {
+                "profileData.image_verification": "pending"
+              }
+            },
+            {
+              $addFields: {
+                registration_date_parsed: {
+                  $toDate: "$profileData.registration_date"
+                }
+              }
+            },
+            {
+              $replaceRoot: {
+                newRoot: {
+                  $mergeObjects: [
+                    "$$ROOT",
+                    "$profileData",
+                    {
+                      user_role: "$user_role",
+                      status: "$status",
+                      ref_no: "$ref_no"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                ref_no: 1,
+                registration_no: 1,
+                first_name: 1,
+                last_name: 1,
+                email_id: 1,
+                gender: 1,
+                user_role: 1,
+                image: 1,
+                image_verification: 1,
+                registration_date: 1
+              }
+            },
+            { $sort: { registration_date_parsed: -1 } },
+            { $skip: page * pageSize },
+            { $limit: pageSize }
+          ]
+        }
+      }
+    ]).exec();
+
+    return res.status(200).json({
+      success: true,
+      content: data,
+      currentPage: page,
+      pageSize,
+      totalRecords: metadata?.[0]?.totalRecords || 0
+    });
+  } catch (error) {
+    console.error("getAllUserImageVerification error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch image verification data"
+    });
+  }
+};
+
 const changePassword = async (req, res) => {
   try {
     const { registration_no } = req.params;
@@ -603,5 +704,6 @@ module.exports = {
   changePassword,
   searchUsersByInput,
   getMyMatches,
-  DeleteImage
+  DeleteImage,
+  getAllUserImageVerification
 };
