@@ -10,9 +10,9 @@ const getUserCounts = async (req, res) => {
       assistancePendingCount,
       assistanceSuccessCount
     ] = await Promise.all([
-      profile.countDocuments({ type_of_user: 'FreeUser' }),
-      profile.countDocuments({ type_of_user: 'SilverUser' }),
-      profile.countDocuments({ type_of_user: 'PremiumUser' }),
+      profile.countDocuments({ type_of_user: 'FreeUser', status: 'active' }),
+      profile.countDocuments({ type_of_user: 'SilverUser',status: 'active' }),
+      profile.countDocuments({ type_of_user: 'PremiumUser', status: 'active' }),
       UserModel.countDocuments({ user_role: 'Assistance', status: { $in: ['pending', 'inactive'] } }),
       UserModel.countDocuments({ user_role: 'Assistance', status: 'active' })
     ]);
