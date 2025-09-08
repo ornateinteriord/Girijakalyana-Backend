@@ -175,34 +175,49 @@ const getAllUserDetails = async (req, res) => {
         $facet: {
           metadata: [
             { $match: { ref_no: { $ne: loggedInUserId } } },
-            { $count: 'totalRecords' }
+            { $count: "totalRecords" }
           ],
           data: [
             { $match: { ref_no: { $ne: loggedInUserId } } },
             {
               $lookup: {
-                from: 'registration_tbl',
-                localField: 'ref_no',
-                foreignField: 'registration_no',
-                as: 'profileData'
+                from: "registration_tbl",
+                localField: "ref_no",
+                foreignField: "registration_no",
+                as: "profileData"
               }
             },
-            { $unwind: '$profileData' },
+            { $unwind: "$profileData" },
             {
               $addFields: {
                 mobile_no: {
                   $cond: [
-                    { $eq: [userRole, 'FreeUser'] },
+                    { $eq: [userRole, "FreeUser"] },
                     null,
-                    '$profileData.mobile_no'
+                    "$profileData.mobile_no"
                   ]
                 },
                 email_id: {
                   $cond: [
-                    { $eq: [userRole, 'FreeUser'] },
+                    { $eq: [userRole, "FreeUser"] },
                     null,
-                    '$profileData.email_id'
+                    "$profileData.email_id"
                   ]
+                },
+                // 🔹 Add sorting priority for type_of_user
+                type_priority: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: ["$profileData.type_of_user", "PremiumUser"] }, then: 1 },
+                      { case: { $eq: ["$profileData.type_of_user", "SilverUser"] }, then: 2 },
+                      { case: { $eq: ["$profileData.type_of_user", "FreeUser"] }, then: 3 }
+                    ],
+                    default: 4
+                  }
+                },
+                // 🔹 Parse registration_date as date for proper sorting
+                registration_date_parsed: {
+                  $toDate: "$profileData.registration_date"
                 }
               }
             },
@@ -210,29 +225,30 @@ const getAllUserDetails = async (req, res) => {
               $replaceRoot: {
                 newRoot: {
                   $mergeObjects: [
-                    '$$ROOT',
-                    '$profileData',
+                    "$$ROOT",
+                    "$profileData",
                     {
-                      user_role: '$user_role',
-                      status: '$status',
-                      UpdateStatus: '$UpdateStatus',
-                      counter: '$counter',
-                      last_loggedin: '$last_loggedin',
-                      ref_no: '$ref_no'
+                      user_role: "$user_role",
+                      status: "$status",
+                      UpdateStatus: "$UpdateStatus",
+                      counter: "$counter",
+                      last_loggedin: "$last_loggedin",
+                      ref_no: "$ref_no"
                     }
                   ]
                 }
               }
             },
-            { 
-              $project: { 
-                password: 0,
+            {
+              $project: {
+                ...(userRole?.toLowerCase() !== "admin" && { password: 0 }),
                 profileData: 0,
                 _id: 0,
                 __v: 0
-              } 
+              }
             },
-            { $sort: { registration_no: 1 } },
+            // 🔹 Sort by priority, then by latest registration
+            { $sort: { type_priority: 1, registration_date_parsed: -1 } },
             { $skip: page * pageSize },
             { $limit: pageSize }
           ]
@@ -255,10 +271,10 @@ const getAllUserDetails = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('getAllUserDetails error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch user details' 
+    console.error("getAllUserDetails error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch user details"
     });
   }
 };
@@ -283,7 +299,7 @@ const getMyMatches = async (req, res) => {
       status: "active"
     };
 
-    // Add gender filter with proper case handling
+    // Gender filter
     if (myProfile.gender) {
       const genderMap = {
         bride: "bridegroom",
@@ -297,7 +313,7 @@ const getMyMatches = async (req, res) => {
       }
     }
 
-    // Add age filter
+    // Age filter
     if (myProfile.from_age_preference && myProfile.to_age_preference) {
       matchCriteria.age = {
         $gte: parseInt(myProfile.from_age_preference),
@@ -305,7 +321,7 @@ const getMyMatches = async (req, res) => {
       };
     }
 
-    // Add height filter - using numeric values only for comparison
+    // Height filter
     if (myProfile.from_height_preference && myProfile.to_height_preference) {
       const extractCm = (heightStr) => {
         const match = heightStr.match(/(\d+)cm/);
@@ -322,9 +338,11 @@ const getMyMatches = async (req, res) => {
       }
     }
 
-    // Add caste filter if not "any"
-    if (myProfile.caste_preference && 
-        !myProfile.caste_preference.toLowerCase().includes('any')) {
+    // Caste filter
+    if (
+      myProfile.caste_preference &&
+      !myProfile.caste_preference.toLowerCase().includes("any")
+    ) {
       matchCriteria.caste = myProfile.caste_preference;
     }
 
@@ -364,24 +382,44 @@ const getMyMatches = async (req, res) => {
                 null,
                 "$email_id"
               ]
+            },
+            // Add priority for sorting
+            type_priority: {
+              $switch: {
+                branches: [
+                  { case: { $eq: ["$type_of_user", "PremiumUser"] }, then: 1 },
+                  { case: { $eq: ["$type_of_user", "SilverUser"] }, then: 2 },
+                  { case: { $eq: ["$type_of_user", "FreeUser"] }, then: 3 }
+                ],
+                default: 4
+              }
+            },
+            // Convert registration_date to Date for proper sorting
+            registration_date_parsed: {
+              $toDate: "$registration_date"
             }
           }
         },
         {
           $project: {
             _id: 0,
-            password: 0,
+            ...(userRole?.toLowerCase() !== "admin" && { password: 0 }),
             user: 0,
             __v: 0
           }
         },
-        { $sort: { registration_no: 1 } },
+        // Sort by user type first, then by latest registration
+        { $sort: { type_priority: 1, registration_date_parsed: -1 } },
         { $skip: page * pageSize },
         { $limit: pageSize }
       ]).exec()
     ]);
 
-    const processedMatches = await processUserImages(matches, userRegNo, req.user.user_role);
+    const processedMatches = await processUserImages(
+      matches,
+      userRegNo,
+      req.user.user_role
+    );
 
     return res.status(200).json({
       success: true,
@@ -400,11 +438,10 @@ const getMyMatches = async (req, res) => {
             to: myProfile?.to_height_preference
           },
           caste: myProfile?.caste_preference,
-          education : myProfile?.education_preference
+          education: myProfile?.education_preference
         }
       }
     });
-
   } catch (error) {
     return res.status(500).json({
       success: false,
