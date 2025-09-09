@@ -11,14 +11,49 @@ const getPromoters = async(req,res)=>{
         res.status(500).json({ success: false, message: error.message });
       }
 }
-const getPromotersEarnings = async(req,res)=>{
-    try {
-        const Earnings = await PromotersEarningsModel.find();
-        res.status(200).json({ success: true, Earnings });
-      } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+const getPromotersEarnings = async (req, res) => {
+  try {
+
+    const Earnings = await PromotersEarningsModel.aggregate([
+      {
+        $match: {
+          referal_by: { $exists: true, $ne: null, $ne: "" }
+        }
+      },
+      {
+        $group: {
+          _id: "$referal_by",
+          totalAmount: { $sum: { $toDouble: "$amount_earned" } },
+          count: { $sum: 1 },
+          status: { $first: "$status" },
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          referal_by: "$_id",
+          totalAmount: 1,
+          count: 1,
+          status: 1,
+        }
+      },
+      {
+        $sort: { referal_by: 1 }
       }
-}
+    ]);
+
+
+    const allRecords = await PromotersEarningsModel.find({});
+
+    res.status(200).json({ 
+      success: true, 
+      Earnings,
+      allRecords 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 const getPromotersTransactions = async(req,res)=>{
     try {
         const Transactions = await PromoterTransactionModel.find();
