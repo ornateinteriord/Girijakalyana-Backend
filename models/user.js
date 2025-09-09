@@ -8,7 +8,6 @@ const UserSchema = new mongoose.Schema({
   user_role: { 
     type: String, 
     required: true,
-    enum: ['FreeUser', 'PremiumUser', 'SilverUser', 'Admin'], 
     default: 'FreeUser'
   },
   status: { type: String, default: "inactive" },

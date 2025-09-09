@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getAllUserDetails, updateProfile, searchUsersByInput, getAllUserImageVerification } = require('../controllers/profileController');
+const { getAllUserDetails, updateProfile, searchUsersByInput, getAllUserImageVerification, upgradeUser } = require('../controllers/profileController');
 const authenticateToken = require('../middleware/auth.middleware');
 const checkRole = require('../middleware/roles.middleware');
 const { getPromotersTransactions, getPromoters, getPromotersEarnings, updatePromoterStatus } = require('../controllers/promoters/PromotersController');
@@ -32,6 +32,7 @@ router.post("/assistance-pending",authenticateToken,checkRole("Admin"),Assistanc
 router.post("/assistance-success",authenticateToken,checkRole("Admin"),assistanceSuccess);
 router.get("/search",authenticateToken,checkRole("Admin"), searchUsersByInput);
 router.post("/image-verification",authenticateToken,checkRole("Admin"), getAllUserImageVerification);
+router.post("/upgrade-user-type/:registration_no",authenticateToken,checkRole("Admin"),upgradeUser);
 
 
 module.exports = router;

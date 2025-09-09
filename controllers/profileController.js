@@ -1,5 +1,6 @@
 const Profile = require("../models/profile");
 const UserModel = require("../models/user");
+const TransactionModel = require("../models/Transactions/OnlineTransaction")
 const { blurAndGetURL } = require("../utils/ImageBlur");
 const { processUserImages } = require("../utils/SecureImageHandler");
 const BlurredImages = require("../models/blurredImages");
@@ -32,8 +33,8 @@ const getProfileByRegistrationNo = async (req, res) => {
 
 const DeleteImage = async (req, res) => {
   try {
-     const { registration_no } = req.params;
-     const profile = await Profile.findOne({ registration_no });
+    const { registration_no } = req.params;
+    const profile = await Profile.findOne({ registration_no });
 
     if (!registration_no) {
       return res.status(404).json({
@@ -47,8 +48,8 @@ const DeleteImage = async (req, res) => {
         message: "No image found to delete for this profile",
       });
     }
-     profile.image = ""; 
-     profile.image_verification = "pending"; // Reset image verification status
+    profile.image = "";
+    profile.image_verification = "pending"; // Reset image verification status
     await profile.save();
 
     return res.status(200).json({
@@ -56,14 +57,14 @@ const DeleteImage = async (req, res) => {
       message: "Image deleted successfully",
     });
   } catch (error) {
-       res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 }
 
 const updateProfile = async (req, res) => {
   try {
     const { registration_no } = req.params;
-    const { _id, image, status,isProfileUpdate,  ...others } = req.body;
+    const { _id, image, status, isProfileUpdate, ...others } = req.body;
     const oldProfile = await Profile.findOne({ registration_no });
     const oldImageVerification = oldProfile ? oldProfile.image_verification : undefined;
 
@@ -85,23 +86,23 @@ const updateProfile = async (req, res) => {
       { ref_no: registration_no },
       { $set: userUpdateObj }
     );
-if (profile) {
-  try {
-    if (
-      typeof oldImageVerification !== 'undefined' &&
-      oldImageVerification === 'pending' &&
-      profile.image_verification === 'active'
-    ) {
-      const { imageVerifiedMessage, imageVerifiedSubject } = getImageVerifiedMessage(profile);
-      await sendMail(profile.email_id, imageVerifiedSubject, imageVerifiedMessage);
-    }
+    if (profile) {
+      try {
+        if (
+          typeof oldImageVerification !== 'undefined' &&
+          oldImageVerification === 'pending' &&
+          profile.image_verification === 'active'
+        ) {
+          const { imageVerifiedMessage, imageVerifiedSubject } = getImageVerifiedMessage(profile);
+          await sendMail(profile.email_id, imageVerifiedSubject, imageVerifiedMessage);
+        }
 
-    if (
-      status && 
-      oldProfile && 
-      oldProfile.status && 
-      oldProfile.status !== status
-    ) {
+        if (
+          status &&
+          oldProfile &&
+          oldProfile.status &&
+          oldProfile.status !== status
+        ) {
           let subject, message;
 
           if (isProfileUpdate === true) {
@@ -121,10 +122,10 @@ if (profile) {
             await sendMail(profile.email_id, subject, message);
           }
         }
-  } catch (error) {
-    console.error( error.message); 
-  }
-}
+      } catch (error) {
+        console.error(error.message);
+      }
+    }
 
     if (!profile) {
       return res.status(404).json({
@@ -517,7 +518,7 @@ const searchUsersByInput = async (req, res) => {
         mobile_no = null;
         email_id = null;
       }
-       // Create base object without password
+      // Create base object without password
       const mergedObject = {
         ...profile.toObject(),
         user_role: user.type_of_user,
@@ -560,10 +561,82 @@ const searchUsersByInput = async (req, res) => {
   }
 };
 
+const upgradeUser = async (req, res) => {
+  try {
+    const { registration_no } = req.params;
+    const { userType, amountPaid, paidType, referenceNumber } = req.body;
+
+
+    // 2️⃣ Find profile by registration_no
+    const profile = await Profile.findOne({ registration_no });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: "Profile not found",
+      });
+    }
+
+    // 3️⃣ Update expiry_date logic
+    let updatedExpiryDate = profile.expiry_date
+      ? new Date(profile.expiry_date)
+      : new Date();
+
+    if (userType === "SilverUser") {
+      updatedExpiryDate.setMonth(updatedExpiryDate.getMonth() + 6);
+    } else if (userType === "PremiumUser") {
+      updatedExpiryDate.setFullYear(updatedExpiryDate.getFullYear() + 1);
+    }
+
+    // 4️⃣ Insert into transaction_tbl
+    const newTransaction = new TransactionModel({
+      registration_no,
+      PG_id: "", // optional (if not available)
+      bank_ref_num: referenceNumber,
+      mode: paidType,
+      amount: amountPaid,
+      status: "success",
+      orderno: "", // optional (if not available)
+      usertype: userType,
+    });
+    await newTransaction.save();
+
+    // 5️⃣ Update profile_tbl
+    await Profile.updateOne(
+      { registration_no },
+      {
+        $set: {
+          type_of_user: userType,
+          expiry_date: updatedExpiryDate,
+        },
+      }
+    );
+
+    // 6️⃣ Update user_tbl (find by ref_no == registration_no)
+    await UserModel.updateOne(
+      { ref_no: registration_no },
+      { $set: { user_role: userType } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "User upgraded successfully",
+      data: {
+        registration_no,
+        userType,
+        expiry_date: updatedExpiryDate,
+      },
+    });
+  } catch (error) {
+    console.error("upgradeUser error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 const getAllUserImageVerification = async (req, res) => {
   try {
-    const { user_role: userRole, ref_no: loggedInUserId } = req.user;
     const { page, pageSize } = getPaginationParams(req);
 
     const [{ metadata, data }] = await UserModel.aggregate([
@@ -705,5 +778,6 @@ module.exports = {
   searchUsersByInput,
   getMyMatches,
   DeleteImage,
-  getAllUserImageVerification
+  getAllUserImageVerification,
+  upgradeUser
 };
