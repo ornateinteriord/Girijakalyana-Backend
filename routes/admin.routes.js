@@ -3,7 +3,7 @@ const router = express.Router();
 const { getAllUserDetails, updateProfile, searchUsersByInput, getAllUserImageVerification, upgradeUser } = require('../controllers/profileController');
 const authenticateToken = require('../middleware/auth.middleware');
 const checkRole = require('../middleware/roles.middleware');
-const { getPromotersTransactions, getPromoters, getPromotersEarnings, updatePromoterStatus } = require('../controllers/promoters/PromotersController');
+const { getPromotersTransactions, getPromoters, getPromotersEarnings, updatePromoterStatus, getPromoterUserStats, getUsersByPromoter } = require('../controllers/promoters/PromotersController');
 const {
   getAllAssistanceTransactions,
   getOnlineAllTransactions
@@ -33,6 +33,8 @@ router.post("/assistance-success",authenticateToken,checkRole("Admin"),assistanc
 router.get("/search",authenticateToken,checkRole("Admin"), searchUsersByInput);
 router.post("/image-verification",authenticateToken,checkRole("Admin"), getAllUserImageVerification);
 router.post("/upgrade-user-type/:registration_no",authenticateToken,checkRole("Admin"),upgradeUser);
+router.get("/promoter-user-stats", authenticateToken, checkRole("Admin"), getPromoterUserStats)
+router.get("/promoter-users/:promoter_id", authenticateToken, checkRole("Admin"), getUsersByPromoter)
 
 
 module.exports = router;
