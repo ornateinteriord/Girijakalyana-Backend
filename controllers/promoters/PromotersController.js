@@ -14,7 +14,6 @@ const getPromoters = async(req,res)=>{
 }
 const getPromotersEarnings = async (req, res) => {
   try {
-
     const Earnings = await PromotersEarningsModel.aggregate([
       {
         $match: {
@@ -43,18 +42,45 @@ const getPromotersEarnings = async (req, res) => {
       }
     ]);
 
-
-    const allRecords = await PromotersEarningsModel.find({});
-
-    res.status(200).json({ 
-      success: true, 
-      Earnings,
-      allRecords 
+    res.status(200).json({
+      success: true,
+      Earnings
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+const getAllPromotersAllData = async (req, res) => {
+  try {
+    const promoterId = req.params.promoter_id;
+    if (!promoterId) {
+      return res.status(400).json({
+        success: false,
+        message: "promoter_id is required in params",
+      });
+    }
+
+    const records = await PromotersEarningsModel.aggregate([
+      {
+        $match: { referal_by: promoterId }
+      },
+      {
+        $sort: { transaction_date: -1 } 
+      }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      promoterId,
+      records
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+
 const getPromotersTransactions = async(req,res)=>{
     try {
         const Transactions = await PromoterTransactionModel.find();
@@ -183,4 +209,7 @@ const getUsersByPromoter = async (req, res) => {
 
 
 
-module.exports = {getPromoters,getPromotersEarnings, getPromotersTransactions,updatePromoterStatus , getPromoterUserStats, getUsersByPromoter};
+module.exports = {getPromoters,getPromotersEarnings, 
+  getPromotersTransactions,updatePromoterStatus ,
+   getPromoterUserStats, getUsersByPromoter,
+  getAllPromotersAllData};
