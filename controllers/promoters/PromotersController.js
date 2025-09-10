@@ -129,7 +129,7 @@ const getUsersByPromoter = async (req, res) => {
   try {
     const { promoter_id } = req.params;
 
-    if (!promoter_id) {
+    if (!promoter_id || promoter_id.trim() === "" || promoter_id === "undefined" || promoter_id === "null") {
       return res.status(400).json({
         success: false,
         message: "promoter_id is required in params",
