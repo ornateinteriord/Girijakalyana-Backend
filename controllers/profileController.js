@@ -283,6 +283,7 @@ const getAllUserDetails = async (req, res) => {
 const getMyMatches = async (req, res) => {
   try {
     const userRegNo = req.user.ref_no;
+    const userRole = req.user.user_role;
     const { page = 0, pageSize = 10 } = getPaginationParams(req);
 
     const myProfile = await Profile.findOne({ registration_no: userRegNo }).lean();
