@@ -68,9 +68,25 @@ const signUp = async (req, res) => {
       ? newUser.user_role
       : "user";
 
+    // Include profile data in token for signup
+    const profileData = {
+      first_name: otherDetails.first_name,
+      last_name: otherDetails.last_name,
+      email_id: username,
+      mobile_no: otherDetails.mobile_no,
+      age: otherDetails.age,
+      city: otherDetails.city,
+      type_of_user: newUser.user_role,
+      status: newProfile.status || 'inactive'
+    };
+
     const token = jwt.sign(
       {
+        user_id: newUser.user_id,
+        username: newUser.username,
         user_role: tokenUserRole,
+        ref_no: newRefNo,
+        ...profileData // Include profile data in token
       },
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
@@ -139,12 +155,31 @@ const login = async (req, res) => {
           : "user"
         : "promoter";
 
+    // Get additional profile data for users (not promoters)
+    let profileData = {};
+    if (userType === "user" && authUser.ref_no) {
+      const userProfile = await profile.findOne({ registration_no: authUser.ref_no });
+      if (userProfile) {
+        profileData = {
+          first_name: userProfile.first_name,
+          last_name: userProfile.last_name,
+          email_id: userProfile.email_id,
+          mobile_no: userProfile.mobile_no,
+          age: userProfile.age,
+          city: userProfile.city,
+          type_of_user: userProfile.type_of_user,
+          status: userProfile.status
+        };
+      }
+    }
+
     const token = jwt.sign(
       {
         user_id: authUser.user_id,
         username: authUser.username,
         user_role: tokenUserRole,
         ref_no: authUser.ref_no,
+        ...profileData // Include profile data in token
       },
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
