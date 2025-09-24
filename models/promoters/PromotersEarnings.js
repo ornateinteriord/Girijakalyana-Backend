@@ -41,16 +41,6 @@ const PromoterEarningsSchema = new mongoose.Schema({
   },
 },{ timestamps: true, collection: "promoters_earnings_tbl" });
 
-// Auto-increment id field
-PromoterEarningsSchema.pre('save', async function(next) {
-  if (this.isNew && !this.id) {
-    const lastEarning = await this.constructor.findOne({}, {}, { sort: { 'id': -1 } });
-    const nextId = lastEarning ? (parseInt(lastEarning.id) + 1) : 1;
-    this.id = nextId.toString();
-  }
-  next();
-});
-
 const PromotersEarningsModel = mongoose.model(
   "promoters_earnings_tbl",
   PromoterEarningsSchema

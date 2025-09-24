@@ -3,6 +3,13 @@ const express = require('express');
 const connectDB = require('./config/db.config');
 const cors = require('cors');
 
+// Debug environment variables
+console.log('Environment variables loaded:');
+console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Present' : 'Missing');
+console.log('IMAGEKIT_PUBLIC_KEY:', process.env.IMAGEKIT_PUBLIC_KEY ? 'Present' : 'Missing');
+console.log('IMAGEKIT_PRIVATE_KEY:', process.env.IMAGEKIT_PRIVATE_KEY ? 'Present' : 'Missing');
+console.log('IMAGEKIT_URL_ENDPOINT:', process.env.IMAGEKIT_URL_ENDPOINT ? 'Present' : 'Missing');
+
 const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
 const userRoutes = require('./routes/user.routes');
@@ -20,11 +27,18 @@ app.use(cors({
   credentials: true 
 }));
 
-const imagekit = new ImageKit({
-  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
-  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
-  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
-});
+// Only initialize ImageKit if all required environment variables are present
+let imagekit = null;
+if (process.env.IMAGEKIT_PUBLIC_KEY && process.env.IMAGEKIT_PRIVATE_KEY && process.env.IMAGEKIT_URL_ENDPOINT) {
+  imagekit = new ImageKit({
+    publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+    privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+    urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+  });
+  console.log('ImageKit initialized successfully');
+} else {
+  console.log('ImageKit not initialized - missing environment variables');
+}
 
 // Database connection
 connectDB();
@@ -39,8 +53,12 @@ app.use((req, res, next) => {
 });
 
 app.get("/image-kit-auth", (_req, res) => {
-  const result = imagekit.getAuthenticationParameters();
-  res.send(result);
+  if (imagekit) {
+    const result = imagekit.getAuthenticationParameters();
+    res.send(result);
+  } else {
+    res.status(500).json({ error: 'ImageKit not configured' });
+  }
 });
 
 // Routes
