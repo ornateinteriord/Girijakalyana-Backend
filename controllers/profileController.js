@@ -289,7 +289,7 @@ const getProfilesRenewal = async (req, res) => {
 
     let filterConditions = {
       user_role: { $ne: "admin" },
-      user_role: { $ne: "FreeUser" },
+       user_role: { $ne: "FreeUser" },
       $or: [
         { status: "pending" },
         { status: "inactive" },
