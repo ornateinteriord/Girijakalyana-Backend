@@ -288,8 +288,7 @@ const getProfilesRenewal = async (req, res) => {
     const limit = parseInt(pageSize);
 
     let filterConditions = {
-      user_role: { $ne: "admin" },
-       user_role: { $ne: "FreeUser" },
+      user_role: { $nin: ["admin", "FreeUser"] },
       $or: [
         { status: "pending" },
         { status: "inactive" },
@@ -346,22 +345,30 @@ const getProfilesRenewal = async (req, res) => {
     ]);
 
     const currentDate = new Date();
+    const currentDateWithoutTime = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+    
     const processedUsers = users.map((user) => {
-      const isExpired = new Date(user.expiry_date) < currentDate;
+      const expiryDate = new Date(user.expiry_date);
+      const expiryDateWithoutTime = new Date(expiryDate.getFullYear(), expiryDate.getMonth(), expiryDate.getDate());
+      
+      const isExpired = expiryDateWithoutTime < currentDateWithoutTime;
       const daysUntilExpiry = !isExpired
-        ? Math.ceil(
-            (new Date(user.expiry_date) - currentDate) / (1000 * 60 * 60 * 24)
-          )
+        ? Math.ceil((expiryDateWithoutTime - currentDateWithoutTime) / (1000 * 60 * 60 * 24))
         : 0;
 
       let finalStatus = isExpired ? "expired" : user.status?.toLowerCase();
+      const day = expiryDate.getDate().toString().padStart(2, '0');
+      const month = (expiryDate.getMonth() + 1).toString().padStart(2, '0');
+      const year = expiryDate.getFullYear();
+      const formattedExpiryDate = `${day}/${month}/${year}`;
 
       return {
         ...user,
+        expiry_date: formattedExpiryDate, 
         status: finalStatus,
         days_until_expiry: daysUntilExpiry,
         expiry_message: isExpired
-          ? `Account expired on ${new Date(user.expiry_date).toLocaleDateString()}`
+          ? `Account expired on ${formattedExpiryDate}`
           : `Account expires in ${daysUntilExpiry} days`,
         can_renew: true,
         renewal_eligible: !["banned", "suspended"].includes(finalStatus),

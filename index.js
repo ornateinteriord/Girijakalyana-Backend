@@ -34,7 +34,7 @@ app.use(express.json({ limit: '10mb' })); // Increase limit for large payloads
 
 // Add request logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  // console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
