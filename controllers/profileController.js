@@ -280,6 +280,111 @@ const getAllUserDetails = async (req, res) => {
   }
 };
 
+
+const getProfilesRenewal = async (req, res) => {
+  try {
+    const { page = 0, pageSize = 50, search } = req.query;
+    const skip = parseInt(page) * parseInt(pageSize);
+    const limit = parseInt(pageSize);
+
+    let filterConditions = {
+      user_role: { $ne: "admin" },
+       user_role: { $ne: "FreeUser" },
+      $or: [
+        { status: "pending" },
+        { status: "inactive" },
+        { status: "expires" },
+        { expiry_date: { $lt: new Date() } },
+      ],
+    };
+
+    if (search) {
+      filterConditions.$and = [
+        {
+          $or: [
+            { registration_no: { $regex: search, $options: "i" } },
+            { first_name: { $regex: search, $options: "i" } },
+            { username: { $regex: search, $options: "i" } },
+            { email_id: { $regex: search, $options: "i" } },
+          ],
+        },
+      ];
+    }
+
+    const [total, users] = await Promise.all([
+      UserModel.countDocuments(filterConditions),
+      UserModel.aggregate([
+        { $match: filterConditions },
+        {
+          $lookup: {
+            from: "registration_tbl",
+            localField: "ref_no",
+            foreignField: "registration_no",
+            as: "profile",
+          },
+        },
+        { $unwind: { path: "$profile", preserveNullAndEmptyArrays: false } },
+        {
+          $project: {
+            username: 1,  
+            user_role: 1,
+            status: 1,
+            registration_no: "$profile.registration_no",
+            first_name: "$profile.first_name",
+            email_id: "$profile.email_id",
+            gender: "$profile.gender",
+            expiry_date: "$profile.expiry_date",
+            mobile_no: "$profile.mobile_no",
+            plan_type: "$profile.plan_type",
+            created_at: "$profile.created_at",
+          },
+        },
+        { $sort: { expiry_date: 1 } },
+        { $skip: skip },
+        { $limit: limit },
+      ]),
+    ]);
+
+    const currentDate = new Date();
+    const processedUsers = users.map((user) => {
+      const isExpired = new Date(user.expiry_date) < currentDate;
+      const daysUntilExpiry = !isExpired
+        ? Math.ceil(
+            (new Date(user.expiry_date) - currentDate) / (1000 * 60 * 60 * 24)
+          )
+        : 0;
+
+      let finalStatus = isExpired ? "expired" : user.status?.toLowerCase();
+
+      return {
+        ...user,
+        status: finalStatus,
+        days_until_expiry: daysUntilExpiry,
+        expiry_message: isExpired
+          ? `Account expired on ${new Date(user.expiry_date).toLocaleDateString()}`
+          : `Account expires in ${daysUntilExpiry} days`,
+        can_renew: true,
+        renewal_eligible: !["banned", "suspended"].includes(finalStatus),
+      };
+    });
+
+    res.json({
+      success: true,
+      content: processedUsers,
+      currentPage: parseInt(page),
+      pageSize: limit,
+      totalRecords: total,
+    });
+  } catch (error) {
+    console.error("Renewal profiles API error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch renewal profiles",
+    });
+  }
+};
+
+
 const getMyMatches = async (req, res) => {
   try {
     const userRegNo = req.user.ref_no;
@@ -567,8 +672,6 @@ const upgradeUser = async (req, res) => {
     const { registration_no } = req.params;
     const { userType, amountPaid, paidType, referenceNumber } = req.body;
 
-
-    // 2️⃣ Find profile by registration_no
     const profile = await Profile.findOne({ registration_no });
     if (!profile) {
       return res.status(404).json({
@@ -577,31 +680,27 @@ const upgradeUser = async (req, res) => {
       });
     }
 
-    // 3️⃣ Update expiry_date logic
-    let updatedExpiryDate = profile.expiry_date
-      ? new Date(profile.expiry_date)
-      : new Date();
+     const today = new Date();
+    let updatedExpiryDate = today;
 
     if (userType === "SilverUser") {
-      updatedExpiryDate.setMonth(updatedExpiryDate.getMonth() + 6);
+      updatedExpiryDate.setMonth(today.getMonth() + 6);
     } else if (userType === "PremiumUser") {
-      updatedExpiryDate.setFullYear(updatedExpiryDate.getFullYear() + 1);
+      updatedExpiryDate.setFullYear(today.getFullYear() + 1);
     }
 
-    // 4️⃣ Insert into transaction_tbl
     const newTransaction = new TransactionModel({
       registration_no,
-      PG_id: "", // optional (if not available)
+      PG_id: "", 
       bank_ref_num: referenceNumber,
       mode: paidType,
       amount: amountPaid,
       status: "success",
-      orderno: "", // optional (if not available)
+      orderno: "", 
       usertype: userType,
     });
     await newTransaction.save();
 
-    // 5️⃣ Update profile_tbl
     await Profile.updateOne(
       { registration_no },
       {
@@ -780,5 +879,6 @@ module.exports = {
   getMyMatches,
   DeleteImage,
   getAllUserImageVerification,
-  upgradeUser
+  upgradeUser,
+  getProfilesRenewal
 };
