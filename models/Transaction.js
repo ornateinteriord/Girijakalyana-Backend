@@ -70,7 +70,8 @@ TransactionSchema.pre('save', async function(next) {
       console.log(`Generated transaction ID: ${this.transcation_id}`);
     } catch (error) {
       console.error('Error generating transaction ID:', error);
-      return next(error);
+      // Fallback to timestamp if there's an error
+      this.transcation_id = Date.now();
     }
   }
   next();
