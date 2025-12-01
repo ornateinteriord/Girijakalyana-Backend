@@ -5,19 +5,13 @@ const paymentController = require('../controllers/payment.controller');
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit per file
     files: 5 // Maximum 5 files
   }
 });
-
-// Test endpoint to verify webhook URL accessibility
-router.get("/webhook-test", paymentController.webhookTest);
-
-// Test endpoint to create a minimal order for debugging
-router.post("/test-order", paymentController.createTestOrder);
 
 // Create Order
 router.post("/create-order", paymentController.createOrder);
@@ -28,8 +22,8 @@ router.post("/verify-payment/:orderId", paymentController.verifyPayment);
 // Endpoint to get a specific incomplete payment by order ID (for admin)
 router.get("/incomplete-payment/:orderId", paymentController.getIncompletePayment);
 
-// Webhook to verify payment
-router.post("/webhook", paymentController.handleWebhook);
+// Webhook to verify payment - uses raw body for signature verification (IMPORTANT)
+router.post("/webhook", express.raw({ type: 'application/json' }), paymentController.handleWebhook);
 
 // Endpoint to retry payment verification for pending orders
 router.post("/retry-payment/:orderId", paymentController.retryPayment);
