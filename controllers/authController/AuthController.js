@@ -149,7 +149,7 @@ const login = async (req, res) => {
       });
     }
 
-    const isPasswordValid = await authUser.comparePassword(password);
+    const isPasswordValid = authUser.password === password;
 
     if (!isPasswordValid) {
       return res.status(400).json({
@@ -285,17 +285,6 @@ const resetPassword = async (req, res) => {
         success: true,
         message: "Password reset successfully",
       });
-    }
-      try {
-        const { postResetPasswordMessage, postResetPasswordSubject } = getPostResetPasswordMessage();
-        await sendMail(username, postResetPasswordSubject, postResetPasswordMessage);
-      } catch (emailError) {
-        console.error("Email error:", emailError);
-      }
-
-      return res
-        .status(200)
-        .json({ success: true, message: "Password reset successfully" });
     }
 
     // If invalid combination of parameters
