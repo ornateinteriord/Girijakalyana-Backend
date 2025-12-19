@@ -128,6 +128,14 @@ const login = async (req, res) => {
   try {
     const { username, password } = req.body;
 
+    // Validate input
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Username and password are required",
+      });
+    }
+
     const user = await UserModel.findOne({ username });
     const promoter = await PromotersModel.findOne({ username });
 
@@ -218,7 +226,8 @@ const login = async (req, res) => {
       message: "Login successful",
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Login error:", error);
+    res.status(500).json({ success: false, message: "Internal server error during login" });
   }
 };
 
@@ -269,6 +278,14 @@ const resetPassword = async (req, res) => {
       user.password = newPassword;
       await user.save();
 
+      const { resetConfirmSubject, resetConfirmMessage } =
+        getPostResetPasswordMessage();
+      await sendMail(user.username, resetConfirmSubject, resetConfirmMessage);
+      return res.json({
+        success: true,
+        message: "Password reset successfully",
+      });
+    }
       try {
         const { postResetPasswordMessage, postResetPasswordSubject } = getPostResetPasswordMessage();
         await sendMail(username, postResetPasswordSubject, postResetPasswordMessage);

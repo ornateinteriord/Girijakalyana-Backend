@@ -81,10 +81,9 @@ const IncompletePaymentSchema = new mongoose.Schema({
 });
 
 // Add indexes for common queries
-IncompletePaymentSchema.index({ orderId: 1 });
+// Removed duplicate indexes that were already defined with 'index: true' in the schema
 IncompletePaymentSchema.index({ resolved: 1 });
 IncompletePaymentSchema.index({ createdAt: -1 });
 IncompletePaymentSchema.index({ ticketRaised: 1 });
-IncompletePaymentSchema.index({ userId: 1 });
 
 module.exports = mongoose.model('IncompletePayment', IncompletePaymentSchema);
