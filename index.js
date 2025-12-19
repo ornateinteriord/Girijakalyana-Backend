@@ -4,11 +4,11 @@ const connectDB = require('./config/db.config');
 const cors = require('cors');
 
 // Debug environment variables
-console.log('Environment variables loaded:');
-console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Present' : 'Missing');
-console.log('IMAGEKIT_PUBLIC_KEY:', process.env.IMAGEKIT_PUBLIC_KEY ? 'Present' : 'Missing');
-console.log('IMAGEKIT_PRIVATE_KEY:', process.env.IMAGEKIT_PRIVATE_KEY ? 'Present' : 'Missing');
-console.log('IMAGEKIT_URL_ENDPOINT:', process.env.IMAGEKIT_URL_ENDPOINT ? 'Present' : 'Missing');
+// console.log('Environment variables loaded:');
+// console.log('MONGODB_URI:', process.env.MONGODB_URI ? 'Present' : 'Missing');
+// console.log('IMAGEKIT_PUBLIC_KEY:', process.env.IMAGEKIT_PUBLIC_KEY ? 'Present' : 'Missing');
+// console.log('IMAGEKIT_PRIVATE_KEY:', process.env.IMAGEKIT_PRIVATE_KEY ? 'Present' : 'Missing');
+// console.log('IMAGEKIT_URL_ENDPOINT:', process.env.IMAGEKIT_URL_ENDPOINT ? 'Present' : 'Missing');
 
 const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');

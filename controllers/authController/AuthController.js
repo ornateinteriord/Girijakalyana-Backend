@@ -120,6 +120,14 @@ const login = async (req, res) => {
   try {
     const { username, password } = req.body;
 
+    // Validate input
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Username and password are required",
+      });
+    }
+
     const user = await UserModel.findOne({ username });
     const promoter = await PromotersModel.findOne({ username });
 
@@ -197,7 +205,8 @@ const login = async (req, res) => {
           : "Account is pending activation.",
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Login error:", error);
+    res.status(500).json({ success: false, message: "Internal server error during login" });
   }
 };
 
@@ -247,8 +256,6 @@ const resetPassword = async (req, res) => {
       user.password = password;
       await user.save();
 
-      clearOTP(email);
-      
       const { resetConfirmSubject, resetConfirmMessage } =
         getPostResetPasswordMessage();
       await sendMail(user.username, resetConfirmSubject, resetConfirmMessage);
