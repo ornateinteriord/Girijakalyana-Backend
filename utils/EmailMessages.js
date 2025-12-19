@@ -156,8 +156,15 @@ const getPostResetPasswordMessage = () => {
 };
 
 // New email template for user payment success notification
-const getUserPaymentSuccessMessage = (userDetails, planType, expiryDate, orderId, amount) => {
+const getUserPaymentSuccessMessage = (userDetails, planType, expiryDate, orderId, amount, originalAmount) => {
   const paymentSuccessSubject = `Your ${projectName} ${planType} Plan Payment Successful!`;
+  
+  // Calculate discount if originalAmount is provided and different from amount
+  const discount = originalAmount && originalAmount > amount ? (originalAmount - amount) : 0;
+  
+  // Determine plan name and duration
+  const planName = planType === 'premium' ? 'Premium' : 'Silver';
+  const planDuration = planType === 'premium' ? '12 months' : '6 months';
 
   const paymentSuccessMessage = `
     <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; margin-bottom: 100px;">
@@ -165,18 +172,27 @@ const getUserPaymentSuccessMessage = (userDetails, planType, expiryDate, orderId
 
       <p>Dear <strong>${userDetails.first_name || ''} ${userDetails.last_name || ''}</strong>,</p>
 
-      <p>Thank you for choosing the <strong>${planType}</strong> plan on ${projectName}!</p>
-
-      <p>Your payment of <strong>₹${amount}</strong> has been successfully processed.</p>
+      <p>Thank you for choosing the <strong>${planName}</strong> plan on ${projectName}!</p>
+      
+      ${discount > 0 ? 
+        `<p>Your payment of <strong>₹${amount}</strong> has been successfully processed (₹${originalAmount} - ₹${discount} discount).</p>` :
+        `<p>Your payment of <strong>₹${amount}</strong> has been successfully processed.</p>`
+      }
 
       <div style="background-color: #E8F5E9; padding: 15px; border-radius: 8px; margin: 20px 0;">
         <h3 style="color: #2E7D32; margin-top: 0;">Payment Details</h3>
-        <p><strong>Plan:</strong> ${planType}</p>
-        <p><strong>Amount Paid:</strong> ₹${amount}</p>
+        <p><strong>Plan:</strong> ${planName} (${planDuration})</p>
+        ${discount > 0 ? 
+          `<p><strong>Original Amount:</strong> <span style="text-decoration: line-through;">₹${originalAmount}</span></p>
+           <p><strong>Discount Applied:</strong> -₹${discount}</p>
+           <p><strong>Final Amount Paid:</strong> ₹${amount}</p>` :
+          `<p><strong>Amount Paid:</strong> ₹${amount}</p>`
+        }
         <p><strong>Expiry Date:</strong> ${expiryDate}</p>
+        ${orderId ? `<p><strong>Order ID:</strong> ${orderId}</p>` : ''}
       </div>
 
-      <p>You can now enjoy all the premium features of your ${planType} plan until <strong>${expiryDate}</strong>.</p>
+      <p>You can now enjoy all the premium features of your ${planName} plan until <strong>${expiryDate}</strong>.</p>
 
       <p style="margin: 20px 0;">
         <a href="${URL}/user/userDashboard" target="_blank"

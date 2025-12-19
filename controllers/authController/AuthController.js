@@ -8,10 +8,9 @@ const PromotersModel = require("../../models/promoters/Promoters");
 const { getWelcomeMessage, getResetPasswordMessage, getPostResetPasswordMessage } = require("../../utils/EmailMessages");
 const { detectPlatform } = require("../../utils/common");
 
-
 const signUp = async (req, res) => {
   try {
-    const { username, password, user_role, ...otherDetails } = req.body;
+    const { username, password, user_role, status, ...otherDetails } = req.body;
 
     const existingUser = await UserModel.findOne({ username });
     if (existingUser) {
@@ -32,12 +31,18 @@ const signUp = async (req, res) => {
         )}`
       : "SGM001";
 
+    // For premium users, set initial status to inactive
+    const userStatus = (user_role === "PremiumUser" || user_role === "SilverUser") 
+      ? (status || "inactive") 
+      : "inactive";
+
     const newUser = new UserModel({
       user_id: newUserId,
       username,
       password,
       ref_no: newRefNo,
       user_role,
+      status: userStatus,
       ...otherDetails,
     });
 
@@ -46,10 +51,16 @@ const signUp = async (req, res) => {
     const currentDate = new Date();
     const formattedDate = FormatDate(currentDate);
 
+    // For premium users, set initial type_of_user to match their plan but keep status inactive
+    const typeOfUser = (user_role === "PremiumUser" || user_role === "SilverUser") 
+      ? user_role 
+      : "FreeUser";
+
     const newProfile = new profile({
       registration_no: newRefNo,
       email_id: username,
-      type_of_user: newUser.user_role,
+      type_of_user: typeOfUser,
+      status: userStatus,
       registration_date: formattedDate,
       ...otherDetails,
     });
@@ -113,9 +124,6 @@ const signUp = async (req, res) => {
   }
 };
 
-
-
-
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -141,68 +149,81 @@ const login = async (req, res) => {
       });
     }
 
-    if (authUser.password !== password) {
+    const isPasswordValid = await authUser.comparePassword(password);
+
+    if (!isPasswordValid) {
       return res.status(400).json({
         success: false,
         message: "Invalid username or password",
       });
     }
 
-    authUser.last_loggedin = new Date();
-    authUser.counter += 1;
-    authUser.loggedin_from = req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-    authUser.loggedin_platform = detectPlatform(req.headers['user-agent']);
-    await authUser.save();
-
-    const validUserRoles = ["FreeUser", "PremiumUser", "SilverUser", "Admin"];
-
-    const tokenUserRole =
-      userType === "user"
-        ? validUserRoles.includes(authUser.user_role)
-          ? authUser.user_role
-          : "user"
-        : "promoter";
-
-    // Get additional profile data for users (not promoters)
-    let profileData = {};
-    if (userType === "user" && authUser.ref_no) {
-      const userProfile = await profile.findOne({ registration_no: authUser.ref_no });
-      if (userProfile) {
-        profileData = {
-          first_name: userProfile.first_name,
-          last_name: userProfile.last_name,
-          email_id: userProfile.email_id,
-          mobile_no: userProfile.mobile_no,
-          age: userProfile.age,
-          city: userProfile.city,
-          type_of_user: userProfile.type_of_user,
-          status: userProfile.status
-        };
-      }
+    // Check if user account is active
+    if (user && user.status !== "active") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is not yet activated. Please wait for admin approval.",
+        accountStatus: user.status
+      });
     }
+
+    const validUserRoles = ["user", "FreeUser", "PremiumUser", "SilverUser", "Admin"];
+    const userRole = validUserRoles.includes(authUser.user_role)
+      ? authUser.user_role
+      : "user";
+
+    const profileData = await profile.findOne({ registration_no: authUser.ref_no });
 
     const token = jwt.sign(
       {
         user_id: authUser.user_id,
         username: authUser.username,
-        user_role: tokenUserRole,
+        user_role: userRole,
         ref_no: authUser.ref_no,
-        ...profileData // Include profile data in token
+        first_name: profileData?.first_name,
+        last_name: profileData?.last_name,
+        email_id: profileData?.email_id,
+        mobile_no: profileData?.mobile_no,
+        age: profileData?.age,
+        city: profileData?.city,
+        type_of_user: profileData?.type_of_user,
+        status: profileData?.status,
       },
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
     );
 
-    return res.status(200).json({
+    const platform = detectPlatform(req);
+
+    await UserModel.updateOne(
+      { username },
+      {
+        $set: {
+          last_loggedin: new Date().toISOString(),
+          loggedin_from: req.ip,
+          loggedin_platform: platform,
+        },
+      }
+    );
+
+    res.status(200).json({
       success: true,
       token,
       user: {
-        status : authUser.status,
+        user_id: authUser.user_id,
+        username: authUser.username,
+        user_role: userRole,
+        ref_no: authUser.ref_no,
+        first_name: profileData?.first_name,
+        last_name: profileData?.last_name,
+        email_id: profileData?.email_id,
+        mobile_no: profileData?.mobile_no,
+        age: profileData?.age,
+        city: profileData?.city,
+        type_of_user: profileData?.type_of_user,
+        status: profileData?.status,
       },
-      message:
-        authUser.status === "active"
-          ? "Login successful"
-          : "Account is pending activation.",
+      message: "Login successful",
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -212,48 +233,49 @@ const login = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   try {
-    const { email, password, otp } = req.body;
-    const user = await UserModel.findOne({ username: email });
+    const { username, otp, newPassword } = req.body;
+
+    const user = await UserModel.findOne({ username });
     if (!user) {
       return res
-        .status(404)
-        .json({ success: false, message: "Email not registered" });
+        .status(400)
+        .json({ success: false, message: "User not found" });
     }
 
-    // Step 1: Initial request - generate and send OTP (only email provided)
-    if (!otp && !password) {
-      const newOtp = generateOTP();
-      storeOTP(email, newOtp);
-      const { resetPasswordSubject, resetPasswordDescription } =
-        getResetPasswordMessage(newOtp);
-      await sendMail(
-        user.username,
-        resetPasswordSubject,
-        resetPasswordDescription
-      );
-      return res.json({ success: true, message: "OTP sent to your email" });
+    // If only username is provided (no OTP), send OTP to user
+    if (username && !otp && !newPassword) {
+      try {
+        const { generateOTP, storeOTP } = require("../../utils/OtpService");
+        const { sendMail } = require("../../utils/EmailService");
+        const { getResetPasswordMessage } = require("../../utils/EmailMessages");
+        
+        const otpCode = generateOTP();
+        storeOTP(username, otpCode);
+        
+        const { resetPasswordMessage, resetPasswordSubject } = getResetPasswordMessage(otpCode);
+        await sendMail(username, resetPasswordSubject, resetPasswordMessage);
+        
+        return res
+          .status(200)
+          .json({ success: true, message: "OTP sent successfully" });
+      } catch (emailError) {
+        console.error("Email error:", emailError);
+        return res
+          .status(500)
+          .json({ success: false, message: "Failed to send OTP" });
+      }
     }
 
-    if (otp && !password) {
-      if (!verifyOTP(email, otp)) {
+    // If username, OTP, and newPassword are provided, reset password
+    if (username && otp && newPassword) {
+      const isOTPValid = await verifyOTP(username, otp);
+      if (!isOTPValid) {
         return res
           .status(400)
-          .json({ success: false, message: "Invalid OTP or expired" });
+          .json({ success: false, message: "Invalid or expired OTP" });
       }
-      return res.json({
-        success: true,
-        message: "OTP verified. Please provide new password.",
-      });
-    }
 
-    if (password && otp) {
-      if (!verifyOTP(email, otp)) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Invalid OTP or expired" });
-      }
-      
-      user.password = password;
+      user.password = newPassword;
       await user.save();
 
       const { resetConfirmSubject, resetConfirmMessage } =
@@ -264,38 +286,35 @@ const resetPassword = async (req, res) => {
         message: "Password reset successfully",
       });
     }
+      try {
+        const { postResetPasswordMessage, postResetPasswordSubject } = getPostResetPasswordMessage();
+        await sendMail(username, postResetPasswordSubject, postResetPasswordMessage);
+      } catch (emailError) {
+        console.error("Email error:", emailError);
+      }
 
- 
-    return res.status(400).json({
-      success: false,
-      message: "Invalid request parameters"
-    });
+      return res
+        .status(200)
+        .json({ success: true, message: "Password reset successfully" });
+    }
 
+    // If invalid combination of parameters
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid request parameters" });
   } catch (error) {
-    console.error("Error in resetPassword:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 const getDashboardStats = async (req, res) => {
   try {
-    const totalProfiles = await profile.countDocuments({
-      type_of_user: { $in: ["FreeUser", "SilverUser", "PremiumUser"] },
-    });
-
-    const currentDate = new Date();
-
-    // Start of week (Sunday)
-    const startOfWeek = new Date(currentDate);
-    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    const startOfMonth = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth(),
-      1
-    );
-    startOfMonth.setHours(0, 0, 0, 0);
+    const totalProfiles = await profile.countDocuments({});
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Start of current week (Sunday)
+    
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1); // Start of current month
 
     const thisWeekRegistrations = await profile.countDocuments({
       $expr: {
