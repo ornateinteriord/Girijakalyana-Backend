@@ -5,36 +5,41 @@ const PromotersModel = require('../models/promoters/Promoters');
 // Check promocode validity
 router.post('/promocheck', async (req, res) => {
   try {
-    const { promocode } = req.body;
+    const { promocode, planType } = req.body;
     
-    if (!promocode) {
+    // Validate input
+    if (!promocode || !promocode.trim()) {
       return res.status(400).json({
         success: false,
         message: 'Promocode is required'
       });
     }
     
-    // Find promoter by promoter_id (which serves as promocode)
+    // Convert promocode to uppercase for consistency
+    const upperPromocode = promocode.trim().toUpperCase();
+    
+    // Check if promocode exists and is active
     const promoter = await PromotersModel.findOne({ 
-      promoter_id: promocode.toUpperCase(),
-      status: 'active' // Only active promoters
+      promoter_id: upperPromocode,
+      status: 'active'  // Only active promoters' promocodes are valid
     });
     
     if (!promoter) {
-      return res.status(404).json({
+      return res.status(400).json({
         success: false,
-        message: 'Invalid or inactive promocode'
+        message: 'Invalid promocode. Please check and try again.'
       });
     }
     
+    // Promocode is valid - return success with discount info
     return res.status(200).json({
       success: true,
-      message: 'Promocode is valid! ₹100 discount applied.',
+      message: 'Promocode applied successfully! ₹100 discount applied.',
       data: {
-        promocode: promocode.toUpperCase(),
+        promocode: upperPromocode,
         discount: 100,
-        promoter_name: promoter.promoter_name,
-        promoter_id: promoter.promoter_id
+        promoterName: promoter.promoter_name,
+        isValid: true
       }
     });
     

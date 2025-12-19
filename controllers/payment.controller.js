@@ -10,76 +10,18 @@ const PromotersModel = require('../models/promoters/Promoters');
 // Get environment variables
 const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID;
 const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY;
-const CASHFREE_BASE_URL = "https://sandbox.cashfree.com/pg/orders";
 
-// Test endpoint to verify webhook URL accessibility
-const webhookTest = (req, res) => {
-  console.log('Webhook test endpoint accessed');
-  res.json({ 
-    message: "Webhook endpoint is accessible", 
-    timestamp: new Date().toISOString(),
-    url: `${process.env.BACKEND_URL}/api/payment/webhook`
-  });
-};
+// Cashfree API Base URLs - Switch based on NODE_ENV
+const CASHFREE_BASE_URL = process.env.NODE_ENV === "PROD"
+  ? "https://api.cashfree.com/pg/orders"
+  : "https://sandbox.cashfree.com/pg/orders";
 
-// Test endpoint to create a minimal order for debugging
-const createTestOrder = async (req, res) => {
-  try {
-    const testOrderId = `test_${Date.now()}`;
-    
-    const minimalOrderData = {
-      order_id: testOrderId,
-      order_amount: 1.00, // Minimum amount
-      order_currency: "INR",
-      customer_details: {
-        customer_id: "9999999999",
-        customer_name: "Test User",
-        customer_email: "test@example.com",
-        customer_phone: "9999999999",
-      },
-      order_meta: {
-        return_url: `${process.env.FRONTEND_URL}/user/userDashboard?order_id=${testOrderId}&test=true`,
-        notify_url: `${process.env.BACKEND_URL}/api/payment/webhook`
-      }
-    };
-
-    console.log('Creating test order:', testOrderId);
-    
-    const response = await axios.post(
-      CASHFREE_BASE_URL,
-      minimalOrderData,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "x-client-id": CASHFREE_APP_ID,
-          "x-client-secret": CASHFREE_SECRET_KEY,
-          "x-api-version": "2022-09-01",
-        },
-        timeout: 30000,
-      }
-    );
-    
-    console.log('✅ Test order created successfully');
-    res.json({
-      success: true,
-      message: 'Test order created successfully',
-      data: response.data
-    });
-    
-  } catch (error) {
-    console.error('❌ Test order creation failed:', error.response?.data || error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Test order creation failed',
-      details: error.response?.data || error.message
-    });
-  }
-};
+const X_API_VERSION = "2022-09-01";
 
 // Create Order
 const createOrder = async (req, res) => {
   try {
-    const { orderId, orderAmount, customerName, customerEmail, customerPhone, planType, promocode, originalAmount } = req.body;
+    const { orderId, orderAmount, customerName, customerEmail, customerPhone, planType, promocode, originalAmount, context } = req.body;
 
     // Validate required fields
     if (!orderId || !orderAmount || !customerName || !customerEmail || !customerPhone) {
@@ -97,12 +39,26 @@ const createOrder = async (req, res) => {
       customerPhone,
       planType,
       promocode,
-      originalAmount
+      originalAmount,
+      context
     });
 
     // Ensure all required data is properly formatted
     const parsedAmount = Math.round(parseFloat(orderAmount) * 100) / 100; // Round to 2 decimal places
     
+    // Determine return URL based on context
+    let returnUrl;
+    if (context === "registration") {
+      // For new registrations, redirect to activation-pending
+      returnUrl = `${process.env.FRONTEND_URL}/activation-pending?registration_success=true`;
+    } else if (context === "existing_user") {
+      // For existing users, redirect to user dashboard
+      returnUrl = `${process.env.FRONTEND_URL}/user/userDashboard`;
+    } else {
+      // Default case, redirect to user dashboard
+      returnUrl = `${process.env.FRONTEND_URL}/user/userDashboard`;
+    }
+
     const orderData = {
       order_id: String(orderId),
       order_amount: parsedAmount,
@@ -114,7 +70,7 @@ const createOrder = async (req, res) => {
         customer_phone: String(customerPhone).replace(/[^0-9]/g, ''), // Only digits
       },
       order_meta: {
-        return_url: `${process.env.FRONTEND_URL}/user/userDashboard`,
+        return_url: returnUrl,
         notify_url: `${process.env.BACKEND_URL}/api/payment/webhook`
       }
     };
@@ -159,9 +115,23 @@ const createOrder = async (req, res) => {
     console.log('Cashfree response:', {
       cf_order_id: response.data.cf_order_id,
       order_status: response.data.order_status,
-      payment_session_id: response.data.payment_session_id
+      payment_session_id: response.data.payment_session_id,
+      cashfree_env: process.env.NODE_ENV === "PROD" ? "production" : "sandbox"
     });
-    res.json(response.data);
+
+    // Return additional data for frontend display
+    // Include cashfree_env so frontend uses the same environment as backend
+    const responseData = {
+      ...response.data,
+      originalAmount: originalAmount ? parseFloat(originalAmount) : parsedAmount,
+      finalAmount: parsedAmount,
+      discountApplied: originalAmount ? (parseFloat(originalAmount) - parsedAmount) : 0,
+      planType: planType || 'silver',
+      // Tell frontend which Cashfree environment to use (must match backend)
+      cashfree_env: process.env.NODE_ENV === "PROD" ? "production" : "sandbox"
+    };
+
+    res.json(responseData);
   } catch (error) {
     console.error('❌ Create order error:', {
       message: error.message,
@@ -565,33 +535,51 @@ const getIncompletePayment = async (req, res) => {
 // Webhook to verify payment
 const handleWebhook = async (req, res) => {
   console.log('=== CASHFREE WEBHOOK RECEIVED ===');
-  console.log('Headers:', req.headers);
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  
-  try {
-    const event = req.body;
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
 
-    // Verify signature for security
-    const receivedSignature = req.headers['x-webhook-signature'];
-    if (receivedSignature) {
+  try {
+    const signature = req.headers["x-webhook-signature"];
+    const timestamp = req.headers["x-webhook-timestamp"];
+
+    // Handle raw body - ensure we have the exact string that was signed
+    let rawBody;
+    if (Buffer.isBuffer(req.body)) {
+      rawBody = req.body.toString('utf8');
+    } else if (typeof req.body === 'string') {
+      rawBody = req.body;
+    } else {
+      rawBody = JSON.stringify(req.body);
+    }
+    console.log('📄 Raw webhook body:', rawBody);
+
+    // Verify signature for security (improved method matching MLM implementation)
+    if (signature && timestamp) {
+      const payload = `${timestamp}${rawBody}`;
       const expectedSignature = crypto
         .createHmac('sha256', CASHFREE_SECRET_KEY)
-        .update(JSON.stringify(event))
+        .update(payload)
         .digest('base64');
-      
+
       console.log('Signature verification:', {
-        received: receivedSignature,
+        received: signature,
         expected: expectedSignature,
-        match: receivedSignature === expectedSignature
+        match: signature === expectedSignature
       });
-      
-      if (receivedSignature !== expectedSignature) {
+
+      if (signature !== expectedSignature) {
         console.error('Invalid webhook signature');
-        return res.status(400).send('Invalid signature');
+        return res.status(401).send('Invalid signature');
       }
     } else {
-      console.warn('No webhook signature provided');
+      console.warn('No webhook signature or timestamp provided');
     }
+
+    // Parse body if needed
+    const event = typeof req.body === 'object' && !Buffer.isBuffer(req.body)
+      ? req.body
+      : JSON.parse(rawBody);
+
+    console.log('✅ Verified webhook data:', JSON.stringify(event, null, 2));
 
     // Process payment event
     if (event.type === 'PAYMENT_SUCCESS_WEBHOOK') {
@@ -1422,6 +1410,11 @@ const processSuccessfulPayment = async ({ orderId, paymentId, orderAmount, payme
     const originalAmount = orderTags.originalAmount || orderAmount;
     
     console.log('Order metadata:', { planType, promocode, originalAmount });
+    console.log('Payment details:', { 
+      orderAmount, 
+      originalAmount, 
+      discount: promocode ? (originalAmount - orderAmount) : 0 
+    });
 
     // Determine user type and subscription duration
     let userType, monthsToAdd, paidUserType;
@@ -1464,16 +1457,22 @@ const processSuccessfulPayment = async ({ orderId, paymentId, orderAmount, payme
       registration_no: transaction.registration_no,
       amount: transaction.amount,
       status: transaction.status,
-      orderno: transaction.orderno
+      orderno: transaction.orderno,
+      original_amount: transaction.original_amount,
+      discount_applied: transaction.discount_applied
     });
 
+    // IMPORTANT: Do NOT automatically activate the account
+    // Admin should manually verify and activate the account
+    // Only update expiry date and user type, but keep status as inactive
+    
     // Update user profile with better error handling
     console.log(`Updating user profile for registration: ${userProfile.registration_no}`);
     const profileUpdateResult = await Profile.findOneAndUpdate(
       { registration_no: userProfile.registration_no },
       {
         expiry_date: formattedExpiryDate,
-        status: 'active',
+        // Keep status as is (inactive) - admin will activate after verification
         type_of_user: userType
       },
       { new: true, runValidators: true }
@@ -1506,7 +1505,7 @@ const processSuccessfulPayment = async ({ orderId, paymentId, orderAmount, payme
     const accountUpdateResult = await UserModel.findOneAndUpdate(
       { ref_no: userProfile.registration_no },
       {
-        status: 'active',
+        // Keep status as is (inactive) - admin will activate after verification
         user_role: userType
       },
       { new: true, runValidators: true }
@@ -1532,7 +1531,7 @@ const processSuccessfulPayment = async ({ orderId, paymentId, orderAmount, payme
       console.log('Account check result:', checkAccount);
     }
 
-    console.log(`User ${userProfile.registration_no} upgraded to ${userType}`);
+    console.log(`User ${userProfile.registration_no} upgraded to ${userType} (status remains inactive for admin verification)`);
 
     // Send payment success email to user
     try {
@@ -1544,7 +1543,8 @@ const processSuccessfulPayment = async ({ orderId, paymentId, orderAmount, payme
         planType,
         formattedExpiryDate,
         orderId,
-        orderAmount
+        orderAmount,
+        originalAmount // Pass original amount for email template
       );
       
       await sendMail(userProfile.email_id, paymentSuccessSubject, paymentSuccessMessage);
@@ -1707,8 +1707,6 @@ const createPromoterEarning = async ({ promocode, userRegistrationNo, userEmail,
 };
 
 module.exports = {
-  webhookTest,
-  createTestOrder,
   createOrder,
   verifyPayment,
   getIncompletePayment,
