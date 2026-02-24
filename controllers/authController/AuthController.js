@@ -13,10 +13,23 @@ const signUp = async (req, res) => {
     const { username, password, user_role, status, ...otherDetails } = req.body;
 
     const existingUser = await UserModel.findOne({ username });
+
+    // If user already exists AND is inactive AND this is a paid plan retry — update instead of reject
+    const isPaidPlan = user_role === "PremiumUser" || user_role === "SilverUser";
     if (existingUser) {
-      return res
-        .status(409)
-        .json({ success: false, message: "Username already exists" });
+      if (existingUser.status === "inactive" && isPaidPlan) {
+        // Update existing inactive user with latest form data
+        await UserModel.updateOne({ username }, { $set: { password, user_role, status: "inactive", ...otherDetails } });
+        await profile.updateOne({ email_id: username }, { $set: { type_of_user: user_role, status: "inactive", ...otherDetails } });
+
+        const token = jwt.sign(
+          { user_id: existingUser.user_id, username, user_role, ref_no: existingUser.ref_no },
+          process.env.JWT_SECRET,
+          { expiresIn: "24h" }
+        );
+        return res.status(200).json({ success: true, token, message: "Registration updated for payment retry" });
+      }
+      return res.status(409).json({ success: false, message: "Username already exists" });
     }
 
     const lastUser = await UserModel.aggregate([
@@ -26,14 +39,14 @@ const signUp = async (req, res) => {
     const newUserId = lastUser.length ? lastUser[0].user_id + 1 : 1;
     const newRefNo = lastUser.length
       ? `SGM${String(parseInt(lastUser[0].ref_no.slice(3)) + 1).padStart(
-          3,
-          "0"
-        )}`
+        3,
+        "0"
+      )}`
       : "SGM001";
 
     // For premium users, set initial status to inactive
-    const userStatus = (user_role === "PremiumUser" || user_role === "SilverUser") 
-      ? (status || "inactive") 
+    const userStatus = (user_role === "PremiumUser" || user_role === "SilverUser")
+      ? (status || "inactive")
       : "inactive";
 
     const newUser = new UserModel({
@@ -52,8 +65,8 @@ const signUp = async (req, res) => {
     const formattedDate = FormatDate(currentDate);
 
     // For premium users, set initial type_of_user to match their plan but keep status inactive
-    const typeOfUser = (user_role === "PremiumUser" || user_role === "SilverUser") 
-      ? user_role 
+    const typeOfUser = (user_role === "PremiumUser" || user_role === "SilverUser")
+      ? user_role
       : "FreeUser";
 
     const newProfile = new profile({
@@ -248,13 +261,13 @@ const resetPassword = async (req, res) => {
         const { generateOTP, storeOTP } = require("../../utils/OtpService");
         const { sendMail } = require("../../utils/EmailService");
         const { getResetPasswordMessage } = require("../../utils/EmailMessages");
-        
+
         const otpCode = generateOTP();
         storeOTP(username, otpCode);
-        
+
         const { resetPasswordMessage, resetPasswordSubject } = getResetPasswordMessage(otpCode);
         await sendMail(username, resetPasswordSubject, resetPasswordMessage);
-        
+
         return res
           .status(200)
           .json({ success: true, message: "OTP sent successfully" });
@@ -301,7 +314,7 @@ const getDashboardStats = async (req, res) => {
     const totalProfiles = await profile.countDocuments({});
     const startOfWeek = new Date();
     startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Start of current week (Sunday)
-    
+
     const startOfMonth = new Date();
     startOfMonth.setDate(1); // Start of current month
 
