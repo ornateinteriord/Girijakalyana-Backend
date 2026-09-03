@@ -56,7 +56,7 @@ app.use((req, res, next) => {
 app.get("/image-kit-auth", (_req, res) => {
   if (imagekit) {
     const result = imagekit.getAuthenticationParameters();
-    res.send(result);
+    res.send({ ...result, publicKey: process.env.IMAGEKIT_PUBLIC_KEY });
   } else {
     res.status(500).json({ error: 'ImageKit not configured' });
   }
