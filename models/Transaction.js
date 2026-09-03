@@ -3,7 +3,13 @@ const mongoose = require('mongoose');
 const TransactionSchema = new mongoose.Schema({
   transcation_id: { // Note: keeping original spelling from example
     type: Number,
-    unique: true
+    unique: true,
+    sparse: true
+  },
+  transaction_id: {
+    type: Number,
+    unique: true,
+    sparse: true
   },
   date: {
     type: Date,
@@ -32,7 +38,7 @@ const TransactionSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    default: 'PENDING' // PENDING, TXN_SUCCESS, TXN_FAILURE
+    default: 'PENDING' // PENDING, SUCCESS, FAILURE
   },
   orderno: {
     type: String,
@@ -41,8 +47,7 @@ const TransactionSchema = new mongoose.Schema({
   },
   usertype: {
     type: String,
-    required: true,
-    enum: ['paidSilver', 'paidPremium']
+    required: true
   },
   promocode: {
     type: String,
@@ -55,23 +60,32 @@ const TransactionSchema = new mongoose.Schema({
   original_amount: {
     type: Number,
     required: true
+  },
+  is_handled: {
+    type: Boolean,
+    default: false
   }
 }, { 
   collection: 'transaction_tbl',
   timestamps: true 
 });
 
-// Auto-increment transaction_id
+// Auto-increment transaction_id and transcation_id
 TransactionSchema.pre('save', async function(next) {
-  if (this.isNew && !this.transcation_id) {
+  if (this.isNew && (!this.transcation_id || !this.transaction_id)) {
     try {
-      const lastTransaction = await this.constructor.findOne({}, {}, { sort: { 'transcation_id': -1 } });
-      this.transcation_id = lastTransaction ? lastTransaction.transcation_id + 1 : 1;
+      const lastTransaction = await this.constructor.findOne({}, {}, { sort: { 'transcation_id': -1, 'transaction_id': -1 } });
+      const lastId = lastTransaction?.transcation_id || lastTransaction?.transaction_id || 0;
+      const nextId = Number(lastId) + 1;
+      this.transcation_id = nextId;
+      this.transaction_id = nextId;
       console.log(`Generated transaction ID: ${this.transcation_id}`);
     } catch (error) {
       console.error('Error generating transaction ID:', error);
       // Fallback to timestamp if there's an error
-      this.transcation_id = Date.now();
+      const fallbackId = Date.now();
+      this.transcation_id = fallbackId;
+      this.transaction_id = fallbackId;
     }
   }
   next();

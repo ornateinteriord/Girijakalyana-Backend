@@ -7,6 +7,7 @@ const BlurredImages = require("../models/blurredImages");
 const { getPaginationParams } = require("../utils/pagination");
 const { getActiveMessage, getDeactiveMessage, getImageVerifiedMessage } = require("../utils/EmailMessages");
 const { sendMail } = require("../utils/EmailService");
+const { creditPromoterOnAdminAction } = require("./payment.controller");
 
 // Get profile by registration number
 const getProfileByRegistrationNo = async (req, res) => {
@@ -125,6 +126,16 @@ const updateProfile = async (req, res) => {
       } catch (error) {
         console.error(error.message);
       }
+
+      if (
+        profile.status?.toLowerCase() === "active" ||
+        profile.image_verification?.toLowerCase() === "active" ||
+        status?.toLowerCase() === "active" ||
+        req.body.status?.toLowerCase() === "active"
+      ) {
+        console.log("=== [CONSLODE LOG: UPDATE PROFILE ACTIVATION] Admin activated user:", profile.registration_no, ". Triggering creditPromoterOnAdminAction ===");
+        await creditPromoterOnAdminAction(profile, Date.now().toString(), profile.type_of_user);
+      }
     }
 
     if (!profile) {
@@ -188,7 +199,7 @@ const getAllUserDetails = async (req, res) => {
                 as: "profileData"
               }
             },
-            { $unwind: "$profileData" },
+            { $unwind: { path: "$profileData", preserveNullAndEmptyArrays: true } },
             {
               $addFields: {
                 mobile_no: {
@@ -218,7 +229,12 @@ const getAllUserDetails = async (req, res) => {
                 },
                 // 🔹 Parse registration_date as date for proper sorting
                 registration_date_parsed: {
-                  $toDate: "$profileData.registration_date"
+                  $dateFromString: {
+                    dateString: "$profileData.registration_date",
+                    format: "%m/%d/%Y",
+                    onError: new Date(0),
+                    onNull: new Date(0)
+                  }
                 }
               }
             },
@@ -240,6 +256,8 @@ const getAllUserDetails = async (req, res) => {
                 }
               }
             },
+            // 🔹 Sort by latest registration and creation timestamp (recent first)
+            { $sort: { registration_date_parsed: -1, _id: -1 } },
             {
               $project: {
                 ...(userRole?.toLowerCase() !== "admin" && { password: 0 }),
@@ -248,8 +266,6 @@ const getAllUserDetails = async (req, res) => {
                 __v: 0
               }
             },
-            // 🔹 Sort by priority, then by latest registration
-            { $sort: { type_priority: 1, registration_date_parsed: -1 } },
             { $skip: page * pageSize },
             { $limit: pageSize }
           ]
@@ -291,6 +307,7 @@ const getProfilesRenewal = async (req, res) => {
       user_role: { $ne: "admin" },
        user_role: { $ne: "FreeUser" },
       $or: [
+        { status: "Pending" },
         { status: "pending" },
         { status: "inactive" },
         { status: "expires" },
@@ -503,7 +520,12 @@ const getMyMatches = async (req, res) => {
             },
             // Convert registration_date to Date for proper sorting
             registration_date_parsed: {
-              $toDate: "$registration_date"
+              $dateFromString: {
+                dateString: "$registration_date",
+                format: "%m/%d/%Y",
+                onError: new Date(0),
+                onNull: new Date(0)
+              }
             }
           }
         },
@@ -680,8 +702,8 @@ const upgradeUser = async (req, res) => {
       });
     }
 
-     const today = new Date();
-    let updatedExpiryDate = today;
+    const today = new Date();
+    let updatedExpiryDate = new Date();
 
     if (userType === "SilverUser") {
       updatedExpiryDate.setMonth(today.getMonth() + 6);
@@ -689,33 +711,69 @@ const upgradeUser = async (req, res) => {
       updatedExpiryDate.setFullYear(today.getFullYear() + 1);
     }
 
+    let finalAmount = Number(amountPaid);
+    if (isNaN(finalAmount) || typeof amountPaid === "undefined" || amountPaid === "" || finalAmount === 0) {
+      if (userType === "SilverUser") finalAmount = 799;
+      else if (userType === "PremiumUser") finalAmount = 999;
+      else finalAmount = 0;
+    }
+
+    const lastTrans = await TransactionModel.findOne({}).sort({ transaction_id: -1, transcation_id: -1 }).lean();
+    const lastId = lastTrans?.transaction_id || lastTrans?.transcation_id || 0;
+    const nextId = Number(lastId) + 1;
+
+    await TransactionModel.updateMany({ registration_no }, { $set: { is_handled: true } });
+
     const newTransaction = new TransactionModel({
       registration_no,
-      PG_id: "", 
-      bank_ref_num: referenceNumber,
-      mode: paidType,
-      amount: amountPaid,
+      transaction_id: nextId,
+      transcation_id: nextId,
+      PG_id: Date.now().toString(),
+      bank_ref_num: referenceNumber || Date.now().toString(),
+      mode: "Admin Approval",
+      amount: finalAmount,
       status: "success",
-      orderno: "", 
+      orderno: Date.now().toString(),
       usertype: userType,
+      is_handled: true,
     });
     await newTransaction.save();
 
-    await Profile.updateOne(
+    const oldStatus = profile.status;
+
+    const updatedProfile = await Profile.findOneAndUpdate(
       { registration_no },
       {
         $set: {
           type_of_user: userType,
           expiry_date: updatedExpiryDate,
+          status: "active",
         },
-      }
+      },
+      { new: true }
     );
 
     // 6️⃣ Update user_tbl (find by ref_no == registration_no)
     await UserModel.updateOne(
       { ref_no: registration_no },
-      { $set: { user_role: userType } }
+      { $set: { user_role: userType, status: "active" } }
     );
+
+    if (updatedProfile && oldStatus !== "active") {
+      try {
+        const { activatedSubject, activatedMessage } = getActiveMessage(updatedProfile);
+        if (activatedSubject && activatedMessage) {
+          await sendMail(updatedProfile.email_id, activatedSubject, activatedMessage);
+        }
+      } catch (emailErr) {
+        console.error("Failed to send activation email during admin upgrade:", emailErr.message);
+      }
+    }
+
+    if (updatedProfile) {
+      console.log("=== [CONSLODE LOG: UPGRADE USER ACTIVATION] Admin upgraded user:", updatedProfile.registration_no, ". Triggering creditPromoterOnAdminAction ===");
+      await creditPromoterOnAdminAction(updatedProfile, Date.now().toString(), userType);
+    }
 
     return res.status(200).json({
       success: true,
@@ -724,6 +782,7 @@ const upgradeUser = async (req, res) => {
         registration_no,
         userType,
         expiry_date: updatedExpiryDate,
+        status: "active",
       },
     });
   } catch (error) {
@@ -777,7 +836,12 @@ const getAllUserImageVerification = async (req, res) => {
             {
               $addFields: {
                 registration_date_parsed: {
-                  $toDate: "$profileData.registration_date"
+                  $dateFromString: {
+                    dateString: "$profileData.registration_date",
+                    format: "%m/%d/%Y",
+                    onError: new Date(0),
+                    onNull: new Date(0)
+                  }
                 }
               }
             },
@@ -796,6 +860,7 @@ const getAllUserImageVerification = async (req, res) => {
                 }
               }
             },
+            { $sort: { registration_date_parsed: -1, _id: -1 } },
             {
               $project: {
                 _id: 0,
@@ -811,7 +876,6 @@ const getAllUserImageVerification = async (req, res) => {
                 registration_date: 1
               }
             },
-            { $sort: { registration_date_parsed: -1 } },
             { $skip: page * pageSize },
             { $limit: pageSize }
           ]
@@ -870,6 +934,58 @@ const changePassword = async (req, res) => {
   }
 };
 
+const submitQrPayment = async (req, res) => {
+  try {
+    const { registration_no, user_id, planName, amount } = req.body;
+
+    let query = {};
+    if (registration_no) query.registration_no = registration_no;
+    else if (user_id) query._id = user_id;
+    else return res.status(400).json({ success: false, message: "User identification required" });
+
+    const profile = await Profile.findOne(query);
+    if (!profile) {
+      return res.status(404).json({ success: false, message: "User profile not found" });
+    }
+
+    const regNo = profile.registration_no;
+
+    const lastTrans = await TransactionModel.findOne({}).sort({ transaction_id: -1, transcation_id: -1 }).lean();
+    const lastId = lastTrans?.transaction_id || lastTrans?.transcation_id || 0;
+    const nextId = Number(lastId) + 1;
+
+    let finalAmount = amount || 999;
+    if (planName === "SilverUser" || planName?.includes("Silver")) finalAmount = 799;
+    else if (planName === "PremiumUser" || planName?.includes("Premium")) finalAmount = 999;
+    else if (planName === "Assistance" || planName?.includes("Assistance")) finalAmount = 1499;
+
+    const newTransaction = new TransactionModel({
+      registration_no: regNo,
+      transaction_id: nextId,
+      transcation_id: nextId,
+      PG_id: Date.now().toString(),
+      bank_ref_num: Date.now().toString(),
+      mode: "Admin Approval",
+      amount: finalAmount,
+      status: "PENDING",
+      orderno: Date.now().toString(),
+      usertype: planName || "PremiumUser",
+      is_handled: false,
+    });
+
+    await newTransaction.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment request submitted successfully",
+      transaction: newTransaction
+    });
+  } catch (error) {
+    console.error("Error submitting QR payment:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getProfileByRegistrationNo,
   updateProfile,
@@ -880,5 +996,6 @@ module.exports = {
   DeleteImage,
   getAllUserImageVerification,
   upgradeUser,
-  getProfilesRenewal
+  getProfilesRenewal,
+  submitQrPayment
 };

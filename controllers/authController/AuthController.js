@@ -7,20 +7,60 @@ const { FormatDate } = require("../../utils/DateFormate");
 const PromotersModel = require("../../models/promoters/Promoters");
 const { getWelcomeMessage, getResetPasswordMessage, getPostResetPasswordMessage } = require("../../utils/EmailMessages");
 const { detectPlatform } = require("../../utils/common");
+const { creditPromoterOnAdminAction } = require("../payment.controller");
 
 const signUp = async (req, res) => {
   try {
     const { username, password, user_role, status, ...otherDetails } = req.body;
+
+    if (otherDetails.refered_by && typeof otherDetails.refered_by === 'string') {
+      otherDetails.refered_by = otherDetails.refered_by.trim().toUpperCase();
+    }
 
     const existingUser = await UserModel.findOne({ username });
 
     // If user already exists AND is inactive AND this is a paid plan retry — update instead of reject
     const isPaidPlan = user_role === "PremiumUser" || user_role === "SilverUser";
     if (existingUser) {
-      if (existingUser.status === "inactive" && isPaidPlan) {
-        // Update existing inactive user with latest form data
-        await UserModel.updateOne({ username }, { $set: { password, user_role, status: "inactive", ...otherDetails } });
-        await profile.updateOne({ email_id: username }, { $set: { type_of_user: user_role, status: "inactive", ...otherDetails } });
+      if ((existingUser.status === "inactive" || existingUser.status === "Pending" || existingUser.status === "pending") && isPaidPlan) {
+        // Update existing inactive/pending user with latest form data
+        await UserModel.updateOne({ username }, { $set: { password, user_role, status: "Pending", ...otherDetails } });
+        await profile.updateOne({ email_id: username }, { $set: { type_of_user: user_role, status: "Pending", ...otherDetails } });
+
+        try {
+          const TransactionModel = require("../../models/Transaction");
+          const existingTxn = await TransactionModel.findOne({ registration_no: existingUser.ref_no });
+          if (!existingTxn) {
+            const lastTrans = await TransactionModel.findOne({}).sort({ transaction_id: -1, transcation_id: -1 }).lean();
+            const lastId = lastTrans?.transaction_id || lastTrans?.transcation_id || 0;
+            const nextId = Number(lastId) + 1;
+            let finalAmount = user_role === "PremiumUser" ? 999 : 799;
+
+            const newTxn = new TransactionModel({
+              registration_no: existingUser.ref_no,
+              transaction_id: nextId,
+              transcation_id: nextId,
+              PG_id: Date.now().toString(),
+              bank_ref_num: Date.now().toString(),
+              mode: "Admin Approval",
+              amount: finalAmount,
+              status: "PENDING",
+              orderno: Date.now().toString(),
+              usertype: user_role,
+              promocode: otherDetails.refered_by || null,
+              discount_applied: 0,
+              original_amount: finalAmount,
+              is_handled: false
+            });
+            await newTxn.save();
+            console.log(`=== [CONSLODE LOG: RETRY TRANSACTION] Created pending transaction in transaction_tbl for Reg No: ${existingUser.ref_no} ===`);
+          } else {
+            await TransactionModel.updateOne({ registration_no: existingUser.ref_no }, { $set: { status: "PENDING", usertype: user_role, promocode: otherDetails.refered_by || existingTxn.promocode } });
+            console.log(`=== [CONSLODE LOG: RETRY TRANSACTION] Updated existing transaction to PENDING for Reg No: ${existingUser.ref_no} ===`);
+          }
+        } catch (retryTxnErr) {
+          console.error("=== [CONSLODE LOG ERROR] Error updating retry transaction:", retryTxnErr, "===");
+        }
 
         const token = jwt.sign(
           { user_id: existingUser.user_id, username, user_role, ref_no: existingUser.ref_no },
@@ -38,16 +78,14 @@ const signUp = async (req, res) => {
     ]);
     const newUserId = lastUser.length ? lastUser[0].user_id + 1 : 1;
     const newRefNo = lastUser.length
-      ? `SGM${String(parseInt(lastUser[0].ref_no.slice(3)) + 1).padStart(
-        3,
+      ? `S${String(parseInt(lastUser[0].ref_no.replace(/\D/g, '')) + 1).padStart(
+        4,
         "0"
       )}`
-      : "SGM001";
+      : "S0001";
 
-    // For premium users, set initial status to inactive
-    const userStatus = (user_role === "PremiumUser" || user_role === "SilverUser")
-      ? (status || "inactive")
-      : "inactive";
+    // For new users, set initial status to Pending
+    const userStatus = status || "Pending";
 
     const newUser = new UserModel({
       user_id: newUserId,
@@ -79,6 +117,43 @@ const signUp = async (req, res) => {
     });
 
     await newProfile.save();
+
+    if (newProfile && (newProfile.type_of_user === "SilverUser" || newProfile.type_of_user === "PremiumUser" || otherDetails.refered_by)) {
+      try {
+        const TransactionModel = require("../../models/Transaction");
+        const lastTrans = await TransactionModel.findOne({}).sort({ transaction_id: -1, transcation_id: -1 }).lean();
+        const lastId = lastTrans?.transaction_id || lastTrans?.transcation_id || 0;
+        const nextId = Number(lastId) + 1;
+        let finalAmount = newProfile.type_of_user === "PremiumUser" ? 999 : 799;
+
+        const newTxn = new TransactionModel({
+          registration_no: newRefNo,
+          transaction_id: nextId,
+          transcation_id: nextId,
+          PG_id: Date.now().toString(),
+          bank_ref_num: Date.now().toString(),
+          mode: "Admin Approval",
+          amount: finalAmount,
+          status: (newProfile.status === "active" || newProfile.status === "Active") ? "SUCCESS" : "PENDING",
+          orderno: Date.now().toString(),
+          usertype: newProfile.type_of_user,
+          promocode: otherDetails.refered_by || null,
+          discount_applied: 0,
+          original_amount: finalAmount,
+          is_handled: (newProfile.status === "active" || newProfile.status === "Active")
+        });
+        await newTxn.save();
+        console.log(`=== [CONSLODE LOG: SIGNUP TRANSACTION] Created transaction in transaction_tbl for Reg No: ${newRefNo} | Promocode: ${otherDetails.refered_by || 'None'} | Status: ${newTxn.status} ===`);
+
+        // If user was created directly as active, credit promoter immediately
+        if (newProfile.status === "active" || newProfile.status === "Active") {
+          console.log("=== [CONSLODE LOG: SIGNUP ACTIVE] User created directly as active. Triggering creditPromoterOnAdminAction ===");
+          await creditPromoterOnAdminAction(newProfile, Date.now().toString(), newProfile.type_of_user);
+        }
+      } catch (txnErr) {
+        console.error("=== [CONSLODE LOG ERROR] Error creating signup transaction:", txnErr, "===");
+      }
+    }
 
     try {
       const { welcomeMessage, welcomeSubject } = getWelcomeMessage(otherDetails, newRefNo);
@@ -173,17 +248,18 @@ const login = async (req, res) => {
 
     // Check if user account is active
     if (user && user.status !== "active") {
+      const isPending = user.status === "Pending" || user.status === "pending" || user.status === "inactive";
       return res.status(403).json({
         success: false,
-        message: "Your account is not yet activated. Please wait for admin approval.",
+        message: isPending ? "Member under pending approval by admin." : "Your account is not yet activated. Please wait for admin approval.",
         accountStatus: user.status
       });
     }
 
-    const validUserRoles = ["user", "FreeUser", "PremiumUser", "SilverUser", "Admin"];
-    const userRole = validUserRoles.includes(authUser.user_role)
-      ? authUser.user_role
-      : "user";
+    const validUserRoles = ["user", "FreeUser", "PremiumUser", "SilverUser", "Admin", "promoter"];
+    const userRole = user
+      ? (validUserRoles.includes(user.user_role) ? user.user_role : "user")
+      : "promoter";
 
     const profileData = await profile.findOne({ registration_no: authUser.ref_no });
 
@@ -200,7 +276,7 @@ const login = async (req, res) => {
         age: profileData?.age,
         city: profileData?.city,
         type_of_user: profileData?.type_of_user,
-        status: profileData?.status,
+        status: authUser.status || profileData?.status,
       },
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
@@ -234,7 +310,7 @@ const login = async (req, res) => {
         age: profileData?.age,
         city: profileData?.city,
         type_of_user: profileData?.type_of_user,
-        status: profileData?.status,
+        status: authUser.status || profileData?.status,
       },
       message: "Login successful",
     });
