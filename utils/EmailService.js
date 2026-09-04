@@ -8,7 +8,7 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS,
   },
 });
-const sendMail = async (email, subject, htmlContent) => {
+const sendMail = async (email, subject, htmlContent, projectName = process.env.PROJECT_NAME) => {
   if (!email || typeof email !== 'string' || !email.includes('@')) {
     console.error("Invalid or missing recipient email:", email);
     return;
@@ -21,7 +21,7 @@ const sendMail = async (email, subject, htmlContent) => {
 
   try {
     const mailOptions = {
-      from: `"Girijakalyana" <${process.env.EMAIL_USER}>`,
+      from: `"${projectName || 'Support'}" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: subject,
        html: htmlContent,
