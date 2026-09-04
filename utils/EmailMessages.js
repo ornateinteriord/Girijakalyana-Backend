@@ -64,7 +64,7 @@ const getActiveMessage = (userDetails) => {
 const getResetPasswordMessage = (newOtp) => {
   const resetPasswordSubject = `${projectName} - Password Recovery`;
 
-  const resetPasswordDescription = `
+  const resetPasswordMessage = `
     <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;margin-bottom: 100px;">
       <h2 style="color: #D32F2F;">Password Reset Request</h2>
 
@@ -86,7 +86,7 @@ const getResetPasswordMessage = (newOtp) => {
       </p>
     </div>
   `;
-  return { resetPasswordDescription, resetPasswordSubject };
+  return { resetPasswordMessage, resetPasswordSubject };
 }
 
 const getDeactiveMessage = (userDetails) => {
