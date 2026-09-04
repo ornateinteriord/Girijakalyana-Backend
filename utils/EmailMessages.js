@@ -1,7 +1,6 @@
 require("dotenv").config();
-const projectName = process.env.PROJECT_NAME
 const URL = process.env.FRONTEND_URL
-const getWelcomeMessage = (userDetails, newRefNo) => {
+const getWelcomeMessage = (userDetails, newRefNo, projectName = process.env.PROJECT_NAME) => {
   const welcomeSubject = `Welcome to ${projectName}!`;
   const welcomeMessage = `
     <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;margin-bottom: 100px;">
@@ -32,7 +31,7 @@ const getWelcomeMessage = (userDetails, newRefNo) => {
   return {welcomeMessage, welcomeSubject};
 }
 
-const getActiveMessage = (userDetails) => {
+const getActiveMessage = (userDetails, projectName = process.env.PROJECT_NAME) => {
   const activatedSubject = `Your ${projectName} Profile is Now Active!`;
 
   const activatedMessage = `
@@ -61,7 +60,7 @@ const getActiveMessage = (userDetails) => {
   return { activatedMessage, activatedSubject };
 }
 
-const getResetPasswordMessage = (newOtp) => {
+const getResetPasswordMessage = (newOtp, projectName = process.env.PROJECT_NAME) => {
   const resetPasswordSubject = `${projectName} - Password Recovery`;
 
   const resetPasswordMessage = `
@@ -89,7 +88,7 @@ const getResetPasswordMessage = (newOtp) => {
   return { resetPasswordMessage, resetPasswordSubject };
 }
 
-const getDeactiveMessage = (userDetails) => {
+const getDeactiveMessage = (userDetails, projectName = process.env.PROJECT_NAME) => {
   const deactivatedSubject = `Your ${projectName} Profile is Deactivated`;
   const deactivatedMessage = `
     <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; margin-bottom: 100px;">
@@ -106,7 +105,7 @@ const getDeactiveMessage = (userDetails) => {
   return { deactivatedMessage, deactivatedSubject };
 };
 
-const getImageVerifiedMessage = (userDetails) => {
+const getImageVerifiedMessage = (userDetails, projectName = process.env.PROJECT_NAME) => {
   const imageVerifiedSubject = `Your ${projectName} Profile Image is Verified`;
   const imageVerifiedMessage = `
     <div style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; margin-bottom: 100px;">
@@ -124,7 +123,7 @@ const getImageVerifiedMessage = (userDetails) => {
 };
 
 
-const getPostResetPasswordMessage = () => {
+const getPostResetPasswordMessage = (projectName = process.env.PROJECT_NAME) => {
   const resetConfirmSubject = `${projectName} - Password Reset Successful`;
 
   const resetConfirmMessage = `
@@ -156,7 +155,7 @@ const getPostResetPasswordMessage = () => {
 };
 
 // New email template for user payment success notification
-const getUserPaymentSuccessMessage = (userDetails, planType, expiryDate, orderId, amount, originalAmount) => {
+const getUserPaymentSuccessMessage = (userDetails, planType, expiryDate, orderId, amount, originalAmount, projectName = process.env.PROJECT_NAME) => {
   const paymentSuccessSubject = `Your ${projectName} ${planType} Plan Payment Successful!`;
   
   // Calculate discount if originalAmount is provided and different from amount
@@ -213,7 +212,7 @@ const getUserPaymentSuccessMessage = (userDetails, planType, expiryDate, orderId
 };
 
 // New email template for promoter payment success notification
-const getPromoterPaymentSuccessMessage = (promoterDetails, userDetails, orderId, amount) => {
+const getPromoterPaymentSuccessMessage = (promoterDetails, userDetails, orderId, amount, projectName = process.env.PROJECT_NAME) => {
   const promoterPaymentSuccessSubject = `Someone Used Your Promocode on ${projectName}!`;
 
   const promoterPaymentSuccessMessage = `

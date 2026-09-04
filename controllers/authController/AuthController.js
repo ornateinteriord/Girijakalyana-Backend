@@ -313,7 +313,8 @@ const login = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   try {
-    const { username, otp, newPassword } = req.body;
+    const { username, otp, newPassword, projectName } = req.body;
+    const resolvedProjectName = projectName || process.env.PROJECT_NAME;
 
     const user = await UserModel.findOne({ username });
     if (!user) {
@@ -332,8 +333,8 @@ const resetPassword = async (req, res) => {
         const otpCode = generateOTP();
         storeOTP(username, otpCode);
 
-        const { resetPasswordMessage, resetPasswordSubject } = getResetPasswordMessage(otpCode);
-        await sendMail(username, resetPasswordSubject, resetPasswordMessage);
+        const { resetPasswordMessage, resetPasswordSubject } = getResetPasswordMessage(otpCode, resolvedProjectName);
+        await sendMail(username, resetPasswordSubject, resetPasswordMessage, resolvedProjectName);
 
         return res
           .status(200)
@@ -359,8 +360,8 @@ const resetPassword = async (req, res) => {
       await user.save();
 
       const { resetConfirmSubject, resetConfirmMessage } =
-        getPostResetPasswordMessage();
-      await sendMail(user.username, resetConfirmSubject, resetConfirmMessage);
+        getPostResetPasswordMessage(resolvedProjectName);
+      await sendMail(user.username, resetConfirmSubject, resetConfirmMessage, resolvedProjectName);
       return res.json({
         success: true,
         message: "Password reset successfully",
