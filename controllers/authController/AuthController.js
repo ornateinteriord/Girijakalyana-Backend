@@ -190,16 +190,7 @@ const signUp = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
     );
-    try {
-      const { welcomeMessage, welcomeSubject } = getWelcomeMessage(
-        otherDetails,
-        newRefNo
-      );
 
-      await sendMail(username, welcomeSubject, welcomeMessage);
-    } catch (emailError) {
-      console.error(emailError);
-    }
 
     return res.status(201).json({
       success: true,
