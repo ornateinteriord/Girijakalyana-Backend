@@ -77,6 +77,11 @@ const updateProfile = async (req, res) => {
     const userUpdateObj = { ...others };
     if (typeof status !== 'undefined') userUpdateObj.status = status;
 
+    // Check profile completeness for otherInfo status
+    const requiredFields = ['height', 'pincode', 'gotra', 'rashi', 'nakshatra', 'subcaste', 'bloodgroup', 'skin_type', 'body_type', 'diet', 'drink', 'smoke', 'sunsign', 'brother_younger_unmarried', 'brother_younger_married', 'brother_elder_unmarried', 'brother_elder_married', 'sister_younger_unmarried', 'sister_younger_married', 'sister_elder_unmarried', 'sister_elder_married', 'from_age_preference', 'to_age_preference', 'from_height_preference', 'to_height_preference', 'education_preference', 'caste_preference', 'maritalstatus_preference', 'occupation_country_preference', 'contactinfo', 'any_other_info'];
+    const merged = { ...oldProfile?.toObject(), ...others };
+    if (requiredFields.every(f => String(merged[f] ?? '').trim())) profileUpdateObj.otherInfo = 'Complete';
+
     const profile = await Profile.findOneAndUpdate(
       { registration_no },
       { $set: profileUpdateObj },
