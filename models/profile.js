@@ -72,7 +72,7 @@ const ProfileSchema = new mongoose.Schema({
   nakshatra: String,
   boost_profile: String,
   boosted_on: String,
-  otherInfo: String,
+  otherInfo: { type: String, default: 'Pending' },
 }, { collection: 'registration_tbl' }); 
 
 // Add compound indexes for commonly queried fields
