@@ -260,6 +260,7 @@ const login = async (req, res) => {
         username: authUser.username,
         user_role: userRole,
         ref_no: authUser.ref_no,
+        promoter_id: promoter ? promoter.promoter_id : undefined,
         first_name: profileData?.first_name,
         last_name: profileData?.last_name,
         email_id: profileData?.email_id,
