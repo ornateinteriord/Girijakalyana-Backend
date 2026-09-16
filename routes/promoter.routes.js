@@ -1,6 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const PromotersModel = require('../models/promoters/Promoters');
+const authenticateToken = require('../middleware/auth.middleware');
+const checkRole = require('../middleware/roles.middleware');
+const { getUsersByPromoter } = require('../controllers/promoters/PromotersController');
+
+// Get all users referred by the logged-in promoter
+router.get('/my-users/:promoter_id', authenticateToken, checkRole("promoter"), getUsersByPromoter);
 
 // Check promocode validity
 router.post('/promocheck', async (req, res) => {
