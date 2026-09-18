@@ -4,6 +4,7 @@ const Profile = require("../../models/profile");
 const profile = require("../../models/profile");
 const { processUserImages } = require("../../utils/SecureImageHandler");
 const { getPaginationParams } = require("../../utils/pagination");
+const { getCasteFilter } = require("../../utils/casteFilter");
 
 
 const expressInterest = asyncHandler(async (req, res) => {
@@ -84,6 +85,7 @@ const getReceivedInterests = asyncHandler(async (req, res) => {
 
     let senderProfiles = await Profile.find({
       registration_no: { $in: senderIds },
+      caste: getCasteFilter(req)
     }).select(excludeFields);
 
 
@@ -145,6 +147,7 @@ const getSentInterests = asyncHandler(async (req, res) => {
 
     let recipientProfiles = await Profile.find({
       registration_no: { $in: recipientIds },
+      caste: getCasteFilter(req)
     }).select(excludeFields);
 
     recipientProfiles = await processUserImages(recipientProfiles, loggedInUserId, senderRole);
@@ -339,7 +342,8 @@ const getAcceptedInterests = asyncHandler(async (req, res) => {
 
     const excludeFields = recipientRole === 'FreeUser' ? '-mobile_no -email_id' : '';
     let senderProfiles = await Profile.find({
-      registration_no: { $in: senderRegistrationNos }
+      registration_no: { $in: senderRegistrationNos },
+      caste: getCasteFilter(req)
     }).select(excludeFields);
 
     senderProfiles = await processUserImages(senderProfiles, loggedInUserId, recipientRole);
@@ -456,7 +460,8 @@ const getAcceptedConnections = asyncHandler(async (req, res) => {
     // Fetch profiles with role-based field exclusion
     const excludeFields = userRole === 'FreeUser' ? '-mobile_no -email_id' : '';
     let profiles = await Profile.find({
-      registration_no: { $in: profileIds }
+      registration_no: { $in: profileIds },
+      caste: getCasteFilter(req)
     }).select(excludeFields);
 
     // Process images

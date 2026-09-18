@@ -1,4 +1,5 @@
 const Profile = require("../models/profile");
+const { getCasteFilter } = require("../utils/casteFilter");
 const UserModel = require("../models/user");
 const TransactionModel = require("../models/Transactions/OnlineTransaction")
 const { blurAndGetURL } = require("../utils/ImageBlur");
@@ -183,28 +184,29 @@ const updateProfile = async (req, res) => {
 
 const getAllUserDetails = async (req, res) => {
   try {
+    const casteFilter = getCasteFilter(req);
     const { user_role: userRole, ref_no: loggedInUserId } = req.user;
     const { page, pageSize } = getPaginationParams(req);
 
     // Using facet for single database call
     const [{ metadata, data }] = await UserModel.aggregate([
+      { $match: { ref_no: { $ne: loggedInUserId } } },
+      {
+        $lookup: {
+          from: "registration_tbl",
+          localField: "ref_no",
+          foreignField: "registration_no",
+          as: "profileData"
+        }
+      },
+      { $unwind: { path: "$profileData", preserveNullAndEmptyArrays: true } },
+      ...(casteFilter ? [{ $match: { "profileData.caste": casteFilter } }] : []),
       {
         $facet: {
           metadata: [
-            { $match: { ref_no: { $ne: loggedInUserId } } },
             { $count: "totalRecords" }
           ],
           data: [
-            { $match: { ref_no: { $ne: loggedInUserId } } },
-            {
-              $lookup: {
-                from: "registration_tbl",
-                localField: "ref_no",
-                foreignField: "registration_no",
-                as: "profileData"
-              }
-            },
-            { $unwind: { path: "$profileData", preserveNullAndEmptyArrays: true } },
             {
               $addFields: {
                 mobile_no: {
@@ -304,6 +306,7 @@ const getAllUserDetails = async (req, res) => {
 
 const getProfilesRenewal = async (req, res) => {
   try {
+    const casteFilter = getCasteFilter(req);
     const { page = 0, pageSize = 50, search } = req.query;
     const skip = parseInt(page) * parseInt(pageSize);
     const limit = parseInt(pageSize);
@@ -333,39 +336,47 @@ const getProfilesRenewal = async (req, res) => {
       ];
     }
 
-    const [total, users] = await Promise.all([
-      UserModel.countDocuments(filterConditions),
-      UserModel.aggregate([
-        { $match: filterConditions },
-        {
-          $lookup: {
-            from: "registration_tbl",
-            localField: "ref_no",
-            foreignField: "registration_no",
-            as: "profile",
-          },
+    const [aggregateResult] = await UserModel.aggregate([
+      { $match: filterConditions },
+      {
+        $lookup: {
+          from: "registration_tbl",
+          localField: "ref_no",
+          foreignField: "registration_no",
+          as: "profile",
         },
-        { $unwind: { path: "$profile", preserveNullAndEmptyArrays: false } },
-        {
-          $project: {
-            username: 1,  
-            user_role: 1,
-            status: 1,
-            registration_no: "$profile.registration_no",
-            first_name: "$profile.first_name",
-            email_id: "$profile.email_id",
-            gender: "$profile.gender",
-            expiry_date: "$profile.expiry_date",
-            mobile_no: "$profile.mobile_no",
-            plan_type: "$profile.plan_type",
-            created_at: "$profile.created_at",
-          },
-        },
-        { $sort: { expiry_date: 1 } },
-        { $skip: skip },
-        { $limit: limit },
-      ]),
+      },
+      { $unwind: { path: "$profile", preserveNullAndEmptyArrays: false } },
+      ...(casteFilter ? [{ $match: { "profile.caste": casteFilter } }] : []),
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          users: [
+            {
+              $project: {
+                username: 1,  
+                user_role: 1,
+                status: 1,
+                registration_no: "$profile.registration_no",
+                first_name: "$profile.first_name",
+                email_id: "$profile.email_id",
+                gender: "$profile.gender",
+                expiry_date: "$profile.expiry_date",
+                mobile_no: "$profile.mobile_no",
+                plan_type: "$profile.plan_type",
+                created_at: "$profile.created_at",
+              },
+            },
+            { $sort: { expiry_date: 1 } },
+            { $skip: skip },
+            { $limit: limit },
+          ]
+        }
+      }
     ]);
+
+    const total = aggregateResult?.metadata[0]?.total || 0;
+    const users = aggregateResult?.users || [];
 
     const currentDate = new Date();
     const processedUsers = users.map((user) => {
@@ -409,6 +420,7 @@ const getProfilesRenewal = async (req, res) => {
 
 const getMyMatches = async (req, res) => {
   try {
+    const casteFilter = getCasteFilter(req);
     const userRegNo = req.user.ref_no;
     const userRole = req.user.user_role;
     const { page = 0, pageSize = 10 } = getPaginationParams(req);
@@ -468,11 +480,15 @@ const getMyMatches = async (req, res) => {
     }
 
     // Caste filter
-    if (
-      myProfile.caste_preference &&
-      !myProfile.caste_preference.toLowerCase().includes("any")
-    ) {
-      matchCriteria.caste = myProfile.caste_preference;
+    if (casteFilter) {
+      matchCriteria.caste = casteFilter;
+    } else {
+      if (
+        myProfile.caste_preference &&
+        !myProfile.caste_preference.toLowerCase().includes("any")
+      ) {
+        matchCriteria.caste = myProfile.caste_preference;
+      }
     }
 
     const [totalRecords, matches] = await Promise.all([
@@ -587,6 +603,7 @@ const getMyMatches = async (req, res) => {
 
 const searchUsersByInput = async (req, res) => {
   try {
+    const casteFilter = getCasteFilter(req);
     const { input } = req.query;
 
     if (!input || input.trim() === "") {
@@ -639,7 +656,17 @@ const searchUsersByInput = async (req, res) => {
       }
     }
 
-    let profiles = await Profile.find({ $or: searchConditions });
+    let queryOptions = { $or: searchConditions };
+    if (casteFilter) {
+      queryOptions = {
+        $and: [
+          { $or: searchConditions },
+          { caste: casteFilter }
+        ]
+      };
+    }
+    
+    let profiles = await Profile.find(queryOptions);
     const regNos = profiles.map((p) => p.registration_no);
     const users = await UserModel.find({ ref_no: { $in: regNos } }).lean();
 

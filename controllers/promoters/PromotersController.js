@@ -3,6 +3,7 @@ const ProfileModel = require("../../models/profile");
 const PromotersEarningsModel = require("../../models/promoters/PromotersEarnings");
 const PromoterTransactionModel = require("../../models/promoters/PromotersTransaction");
 const { FormatDate } = require("../../utils/DateFormate");
+const { getCasteFilter } = require("../../utils/casteFilter");
 
 
 
@@ -141,7 +142,7 @@ const updatePromoterStatus = async (req, res) => {
   }
 };
 
-const getPromoterUserStats = async (_req, res) => {
+const getPromoterUserStats = async (req, res) => {
   try {
     // Get all promoters
     const promoters = await PromotersModel.find({}, { promoter_id: 1, promoter_name: 1 });
@@ -151,8 +152,14 @@ const getPromoterUserStats = async (_req, res) => {
       promoters.map(async (promoter) => {
         const promoterId = promoter.promoter_id;
 
+        const query = { refered_by: { $regex: new RegExp(`^${promoterId}$`, "i") } };
+        const casteFilter = getCasteFilter(req);
+        if (casteFilter) {
+          query.caste = casteFilter;
+        }
+
         // Find all users referred by this promoter (case-insensitive)
-        const users = await ProfileModel.find({ refered_by: { $regex: new RegExp(`^${promoterId}$`, "i") } }, { type_of_user: 1 });
+        const users = await ProfileModel.find(query, { type_of_user: 1 });
 
         // Count types
         const freeCount = users.filter(u => u.type_of_user === "FreeUser").length;
@@ -189,10 +196,16 @@ const getUsersByPromoter = async (req, res) => {
       });
     }
 
+    const matchObj = { refered_by: { $regex: new RegExp(`^${promoter_id}$`, "i") } };
+    const casteFilter = getCasteFilter(req);
+    if (casteFilter) {
+      matchObj.caste = casteFilter;
+    }
+
     // Aggregation pipeline
     const users = await ProfileModel.aggregate([
       {
-        $match: { refered_by: { $regex: new RegExp(`^${promoter_id}$`, "i") } }
+        $match: matchObj
       },
       {
         // Add custom order for type_of_user
