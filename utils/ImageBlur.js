@@ -6,7 +6,15 @@ async function blurAndGetURL(imageUrl,username, blurAmount = 20) {
   try {
     // 1. Download and process image
     const response = await fetch(imageUrl);
-    const buffer = await sharp(await response.arrayBuffer())
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+      throw new Error("Fetched image is empty");
+    }
+
+    const buffer = await sharp(arrayBuffer)
       .blur(Number(blurAmount))
       .jpeg()
       .toBuffer();

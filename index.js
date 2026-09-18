@@ -24,7 +24,8 @@ const app = express();
 // Add error handling middleware
 app.use(cors({
   origin: '*', 
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-project'],
   credentials: true 
 }));
 
