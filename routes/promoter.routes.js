@@ -3,10 +3,26 @@ const router = express.Router();
 const PromotersModel = require('../models/promoters/Promoters');
 const authenticateToken = require('../middleware/auth.middleware');
 const checkRole = require('../middleware/roles.middleware');
-const { getUsersByPromoter } = require('../controllers/promoters/PromotersController');
+const { getUsersByPromoter, getPromoterSentInterests, getPromoterReceivedInterests, getPromoterUserImageVerification, updatePromoterUserImageVerification } = require('../controllers/promoters/PromotersController');
+const { searchUsersByInput } = require('../controllers/profileController');
 
 // Get all users referred by the logged-in promoter
 router.get('/my-users/:promoter_id', authenticateToken, checkRole("promoter"), getUsersByPromoter);
+
+// Get sent interests for users referred by the promoter
+router.get('/interests/sent/:promoter_id', authenticateToken, checkRole("promoter"), getPromoterSentInterests);
+
+// Get received interests for users referred by the promoter
+router.get('/interests/received/:promoter_id', authenticateToken, checkRole("promoter"), getPromoterReceivedInterests);
+
+// Search profiles for promoter
+router.get('/search', authenticateToken, checkRole("promoter"), searchUsersByInput);
+
+// Get image verification pending users for a promoter
+router.post('/image-verification/:promoter_id', authenticateToken, checkRole("promoter"), getPromoterUserImageVerification);
+
+// Upgrade user image verification status by promoter
+router.put('/upgrade-user/:regno', authenticateToken, checkRole("promoter"), updatePromoterUserImageVerification);
 
 // Check promocode validity
 router.post('/promocheck', async (req, res) => {

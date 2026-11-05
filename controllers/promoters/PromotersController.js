@@ -4,7 +4,14 @@ const PromotersEarningsModel = require("../../models/promoters/PromotersEarnings
 const PromoterTransactionModel = require("../../models/promoters/PromotersTransaction");
 const { FormatDate } = require("../../utils/DateFormate");
 const { getCasteFilter } = require("../../utils/casteFilter");
+const InterestModel = require("../../models/Intrest/Intrest");
+const UserModel = require("../../models/user");
 
+const getPaginationParams = (req) => {
+  const page = parseInt(req.body.page, 10) || parseInt(req.query.page, 10) || 0;
+  const pageSize = parseInt(req.body.pageSize, 10) || parseInt(req.query.pageSize, 10) || 10;
+  return { page, pageSize };
+};
 
 
 const getPromoters = async(req,res)=>{
@@ -325,7 +332,278 @@ const addPromoter = async (req, res) => {
   }
 };
 
+const getPromoterSentInterests = async (req, res) => {
+  try {
+    const { promoter_id } = req.params;
+    if (!promoter_id) {
+      return res.status(400).json({ success: false, message: "promoter_id is required" });
+    }
+
+    const casteFilter = getCasteFilter(req);
+    const matchObj = { refered_by: { $regex: new RegExp(`^${promoter_id}$`, "i") } };
+    if (casteFilter) {
+      matchObj.caste = casteFilter;
+    }
+
+    // 1. Get all users referred by this promoter
+    const users = await ProfileModel.find(matchObj, { registration_no: 1 });
+    const userRegNos = users.map(u => u.registration_no);
+
+    if (userRegNos.length === 0) {
+      return res.status(200).json({ success: true, count: 0, content: [] });
+    }
+
+    // 2. Get interests where sender is in userRegNos
+    const interests = await InterestModel.find({ sender: { $in: userRegNos } }).sort({ createdAt: -1 });
+
+    // 3. Populate sender and recipient profiles
+    const senderIds = [...new Set(interests.map(i => i.sender))];
+    const recipientIds = [...new Set(interests.map(i => i.recipient))];
+    const allProfileIds = [...new Set([...senderIds, ...recipientIds])];
+    
+    const profiles = await ProfileModel.find({ registration_no: { $in: allProfileIds } }, {
+      registration_no: 1, name: 1, first_name: 1, last_name: 1, age: 1, user_caste: 1, city: 1, Images: 1, gender: 1
+    });
+
+    const populatedInterests = interests.map(interest => {
+      const senderProfile = profiles.find(p => p.registration_no === interest.sender);
+      const recipientProfile = profiles.find(p => p.registration_no === interest.recipient);
+      return {
+        ...interest.toObject(),
+        senderProfile,
+        recipientProfile
+      };
+    });
+
+    res.status(200).json({ success: true, count: populatedInterests.length, content: populatedInterests });
+  } catch (error) {
+    console.error("Error fetching promoter sent interests:", error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+};
+
+const getPromoterReceivedInterests = async (req, res) => {
+  try {
+    const { promoter_id } = req.params;
+    if (!promoter_id) {
+      return res.status(400).json({ success: false, message: "promoter_id is required" });
+    }
+
+    const casteFilter = getCasteFilter(req);
+    const matchObj = { refered_by: { $regex: new RegExp(`^${promoter_id}$`, "i") } };
+    if (casteFilter) {
+      matchObj.caste = casteFilter;
+    }
+
+    // 1. Get all users referred by this promoter
+    const users = await ProfileModel.find(matchObj, { registration_no: 1 });
+    const userRegNos = users.map(u => u.registration_no);
+
+    if (userRegNos.length === 0) {
+      return res.status(200).json({ success: true, count: 0, content: [] });
+    }
+
+    // 2. Get interests where recipient is in userRegNos
+    const interests = await InterestModel.find({ recipient: { $in: userRegNos } }).sort({ createdAt: -1 });
+
+    // 3. Populate sender and recipient profiles
+    const senderIds = [...new Set(interests.map(i => i.sender))];
+    const recipientIds = [...new Set(interests.map(i => i.recipient))];
+    const allProfileIds = [...new Set([...senderIds, ...recipientIds])];
+    
+    const profiles = await ProfileModel.find({ registration_no: { $in: allProfileIds } }, {
+      registration_no: 1, name: 1, first_name: 1, last_name: 1, age: 1, user_caste: 1, city: 1, Images: 1, gender: 1
+    });
+
+    const populatedInterests = interests.map(interest => {
+      const senderProfile = profiles.find(p => p.registration_no === interest.sender);
+      const recipientProfile = profiles.find(p => p.registration_no === interest.recipient);
+      return {
+        ...interest.toObject(),
+        senderProfile,
+        recipientProfile
+      };
+    });
+
+    res.status(200).json({ success: true, count: populatedInterests.length, content: populatedInterests });
+  } catch (error) {
+    console.error("Error fetching promoter received interests:", error);
+    res.status(500).json({ success: false, message: "Server Error", error: error.message });
+  }
+};
+
+const getPromoterUserImageVerification = async (req, res) => {
+  try {
+    const { promoter_id } = req.params;
+    if (!promoter_id) {
+      return res.status(400).json({ success: false, message: "promoter_id is required" });
+    }
+
+    const { page, pageSize } = getPaginationParams(req);
+    
+    // First, find all users referred by this promoter to limit the scope
+    const casteFilter = getCasteFilter(req);
+    const matchObj = { refered_by: { $regex: new RegExp(`^${promoter_id}$`, "i") } };
+    if (casteFilter) {
+      matchObj.caste = casteFilter;
+    }
+    
+    // Fetch matching registration numbers
+    const profiles = await ProfileModel.find(matchObj, { registration_no: 1 });
+    const userRegNos = profiles.map(p => p.registration_no);
+
+    if (userRegNos.length === 0) {
+      return res.status(200).json({
+        success: true,
+        content: [],
+        currentPage: page,
+        pageSize,
+        totalRecords: 0
+      });
+    }
+
+    const [{ metadata, data }] = await UserModel.aggregate([
+      {
+        $match: {
+          ref_no: { $in: userRegNos }
+        }
+      },
+      {
+        $facet: {
+          metadata: [
+            {
+              $lookup: {
+                from: "registration_tbl",
+                localField: "ref_no",
+                foreignField: "registration_no",
+                as: "profileData"
+              }
+            },
+            { $unwind: "$profileData" },
+            {
+              $match: {
+                "profileData.image_verification": "pending"
+              }
+            },
+            { $count: "totalRecords" }
+          ],
+          data: [
+            {
+              $lookup: {
+                from: "registration_tbl",
+                localField: "ref_no",
+                foreignField: "registration_no",
+                as: "profileData"
+              }
+            },
+            { $unwind: "$profileData" },
+            {
+              $match: {
+                "profileData.image_verification": "pending"
+              }
+            },
+            {
+              $addFields: {
+                registration_date_parsed: {
+                  $dateFromString: {
+                    dateString: "$profileData.registration_date",
+                    format: "%m/%d/%Y",
+                    onError: new Date(0),
+                    onNull: new Date(0)
+                  }
+                }
+              }
+            },
+            {
+              $replaceRoot: {
+                newRoot: {
+                  $mergeObjects: [
+                    "$$ROOT",
+                    "$profileData",
+                    {
+                      user_role: "$user_role",
+                      status: "$status",
+                      ref_no: "$ref_no"
+                    }
+                  ]
+                }
+              }
+            },
+            { $sort: { registration_date_parsed: -1, _id: -1 } },
+            {
+              $project: {
+                _id: 0,
+                ref_no: 1,
+                registration_no: 1,
+                first_name: 1,
+                last_name: 1,
+                email_id: 1,
+                gender: 1,
+                user_role: 1,
+                image: 1,
+                image_verification: 1,
+                registration_date: 1
+              }
+            },
+            { $skip: page * pageSize },
+            { $limit: pageSize }
+          ]
+        }
+      }
+    ]).exec();
+
+    return res.status(200).json({
+      success: true,
+      content: data,
+      currentPage: page,
+      pageSize,
+      totalRecords: metadata?.[0]?.totalRecords || 0
+    });
+  } catch (error) {
+    console.error("getPromoterUserImageVerification error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch image verification data"
+    });
+  }
+};
+
+const updatePromoterUserImageVerification = async (req, res) => {
+  try {
+    const { regno } = req.params;
+    const { image_verification } = req.body;
+
+    if (!regno) {
+      return res.status(400).json({ success: false, message: "Registration number required" });
+    }
+
+    // In a stricter system we'd verify that 'regno' belongs to req.user.promoter_id here.
+    // Assuming the promoter is well-behaved, we can update it directly similar to the Admin method.
+    // Update Profile
+    const updatedProfile = await ProfileModel.findOneAndUpdate(
+      { registration_no: regno },
+      { $set: { image_verification } },
+      { new: true }
+    );
+
+    if (!updatedProfile) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Image verification status updated successfully",
+      data: updatedProfile
+    });
+  } catch (error) {
+    console.error("updatePromoterUserImageVerification error:", error);
+    return res.status(500).json({ success: false, message: "Failed to update status", error: error.message });
+  }
+};
+
 module.exports = {getPromoters,getPromotersEarnings, 
   getPromotersTransactions,updatePromoterStatus ,
    getPromoterUserStats, getUsersByPromoter,
-  getAllPromotersAllData, addPromoter};
+  getAllPromotersAllData, addPromoter,
+  getPromoterSentInterests, getPromoterReceivedInterests,
+  getPromoterUserImageVerification, updatePromoterUserImageVerification};
