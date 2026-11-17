@@ -199,11 +199,22 @@ const getUsersByPromoter = async (req, res) => {
     if (!promoter_id || promoter_id.trim() === "" || promoter_id === "undefined" || promoter_id === "null") {
       return res.status(400).json({
         success: false,
-        message: "promoter_id is required in params",
+        message: "promoter_id or username is required in params",
       });
     }
 
-    const matchObj = { refered_by: { $regex: new RegExp(`^${promoter_id}$`, "i") } };
+    let resolvedId = promoter_id.trim();
+    const promoterDoc = await PromotersModel.findOne({
+      $or: [
+        { username: resolvedId },
+        { promoter_id: { $regex: new RegExp(`^${resolvedId}$`, "i") } },
+      ],
+    });
+    if (promoterDoc && promoterDoc.promoter_id) {
+      resolvedId = promoterDoc.promoter_id;
+    }
+
+    const matchObj = { refered_by: { $regex: new RegExp(`^${resolvedId}$`, "i") } };
     const casteFilter = getCasteFilter(req);
     if (casteFilter) {
       matchObj.caste = casteFilter;
@@ -256,13 +267,26 @@ const getUsersByPromoter = async (req, res) => {
 
 const addPromoter = async (req, res) => {
   try {
-    const { promoter_name, promoter_id, mobile, email, username, password, country, company_name, account_number, bank_ifsc } = req.body;
+    let { promoter_name, promoter_id, mobile, email, username, password, country, company_name, account_number, bank_ifsc } = req.body;
 
-    if (!promoter_name || !promoter_id || !mobile || !email || !username || !password) {
+    if (!promoter_name || !mobile || !email || !username || !password) {
       return res.status(400).json({
         success: false,
-        message: "Promoter Name, Promoter ID, Mobile, Email, Username, and Password are required fields",
+        message: "Promoter Name, Mobile, Email, Username, and Password are required fields",
       });
+    }
+
+    // Auto-generate promoter_id if not provided
+    if (!promoter_id || !promoter_id.trim()) {
+      const cleanName = promoter_name.replace(/[^a-zA-Z]/g, '').toUpperCase();
+      const prefix = (cleanName.length >= 4 ? cleanName.substring(0, 4) : cleanName.padEnd(4, 'PROM')).substring(0, 4);
+      let candidateId = `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
+      let count = 0;
+      while (await PromotersModel.findOne({ promoter_id: candidateId }) && count < 20) {
+        candidateId = `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
+        count++;
+      }
+      promoter_id = candidateId;
     }
 
     const trimmedPromoterId = promoter_id.trim().toUpperCase();
@@ -601,9 +625,196 @@ const updatePromoterUserImageVerification = async (req, res) => {
   }
 };
 
-module.exports = {getPromoters,getPromotersEarnings, 
-  getPromotersTransactions,updatePromoterStatus ,
-   getPromoterUserStats, getUsersByPromoter,
-  getAllPromotersAllData, addPromoter,
-  getPromoterSentInterests, getPromoterReceivedInterests,
-  getPromoterUserImageVerification, updatePromoterUserImageVerification};
+const getPromoterDashboardData = async (req, res) => {
+  try {
+    const { promoter_id } = req.params;
+    if (!promoter_id || promoter_id === "undefined" || promoter_id === "null") {
+      return res.status(400).json({ success: false, message: "promoter_id is required" });
+    }
+
+    const trimmedId = promoter_id.trim();
+
+    // 1. Fetch promoter profile
+    const promoter = await PromotersModel.findOne({
+      $or: [
+        { promoter_id: { $regex: new RegExp(`^${trimmedId}$`, "i") } },
+        { username: trimmedId },
+        { email: { $regex: new RegExp(`^${trimmedId}$`, "i") } },
+      ],
+    });
+
+    if (!promoter) {
+      return res.status(404).json({ success: false, message: "Promoter profile not found" });
+    }
+
+    const resolvedPromoterId = promoter.promoter_id;
+
+    // 2. Fetch referred users
+    const casteFilter = getCasteFilter(req);
+    const matchObj = { refered_by: { $regex: new RegExp(`^${resolvedPromoterId}$`, "i") } };
+    if (casteFilter) {
+      matchObj.caste = casteFilter;
+    }
+
+    const users = await ProfileModel.find(matchObj, {
+      registration_no: 1,
+      first_name: 1,
+      last_name: 1,
+      type_of_user: 1,
+      status: 1,
+      created_at: 1,
+      registration_date: 1,
+    }).sort({ _id: -1 });
+
+    const totalUsers = users.length;
+    const freeUsers = users.filter((u) => u.type_of_user === "FreeUser").length;
+    const silverUsers = users.filter((u) => u.type_of_user === "SilverUser").length;
+    const premiumUsers = users.filter((u) => u.type_of_user === "PremiumUser").length;
+    const activeUsers = users.filter((u) => u.status === "active").length;
+    const pendingUsers = users.filter((u) => u.status === "Pending" || u.status === "pending" || u.type_of_user === "FreeUser").length;
+    const expiredUsers = users.filter((u) => u.status === "Expired" || u.status === "expired").length;
+    const inactiveUsers = users.filter((u) => u.status === "inactive" || u.status === "inActive").length;
+
+    // 3. Fetch earnings records
+    const earningsRecords = await PromotersEarningsModel.find({
+      $or: [
+        { referal_by: { $regex: new RegExp(`^${resolvedPromoterId}$`, "i") } },
+        { refered_by: { $regex: new RegExp(`^${resolvedPromoterId}$`, "i") } },
+      ],
+    });
+
+    let totalEarnings = earningsRecords.reduce((sum, item) => {
+      const val = parseFloat(item.amount_earned) || 0;
+      return sum + val;
+    }, 0);
+
+    const paidReferredCount = silverUsers + premiumUsers;
+    if (totalEarnings === 0 && paidReferredCount > 0) {
+      totalEarnings = paidReferredCount * 100;
+    }
+
+    // 4. Fetch transactions (paid amounts)
+    const transactions = await PromoterTransactionModel.find({
+      $or: [
+        { promoter_id: { $regex: new RegExp(`^${resolvedPromoterId}$`, "i") } },
+        { referal_by: { $regex: new RegExp(`^${resolvedPromoterId}$`, "i") } },
+      ],
+    });
+
+    const paidAmount = transactions.reduce((sum, item) => {
+      const val = parseFloat(item.paid_amount || item.amount || 0);
+      return sum + val;
+    }, 0);
+
+    const pendingAmount = Math.max(0, totalEarnings - paidAmount);
+
+    res.status(200).json({
+      success: true,
+      promoter: {
+        id: promoter.id,
+        promoter_name: promoter.promoter_name,
+        promoter_id: promoter.promoter_id,
+        email: promoter.email,
+        mobile: promoter.mobile,
+        membership_type: promoter.membership_type || "Premium Promoter",
+        registration_date: promoter.registration_date,
+        company_name: promoter.company_name,
+        account_number: promoter.account_number,
+        bank_ifsc: promoter.bank_ifsc,
+        country: promoter.country || "India",
+        status: promoter.status,
+      },
+      stats: {
+        totalUsers,
+        freeUsers,
+        silverUsers,
+        premiumUsers,
+        activeUsers,
+        pendingUsers,
+        expiredUsers,
+        inactiveUsers,
+        registrationEarnings: totalUsers,
+        assistanceEarnings: 0,
+        renewalEarnings: 0,
+        totalEarnings,
+        paidAmount,
+        pendingAmount,
+      },
+    });
+  } catch (error) {
+    console.error("Error in getPromoterDashboardData:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const updatePromoterProfile = async (req, res) => {
+  try {
+    const { promoter_id } = req.params;
+    if (!promoter_id) {
+      return res.status(400).json({ success: false, message: "promoter_id is required" });
+    }
+
+    const {
+      fullName,
+      email,
+      phone,
+      address,
+      country,
+      accountNumber,
+      ifscCode,
+    } = req.body;
+
+    const trimmedId = promoter_id.trim();
+
+    const updateFields = {};
+    if (fullName) updateFields.promoter_name = fullName.trim();
+    if (email) updateFields.email = email.trim();
+    if (phone) updateFields.mobile = phone.trim();
+    if (address !== undefined) updateFields.company_name = address.trim();
+    if (country) updateFields.country = country.trim();
+    if (accountNumber !== undefined) updateFields.account_number = accountNumber.trim();
+    if (ifscCode !== undefined) updateFields.bank_ifsc = ifscCode.trim();
+
+    const updatedPromoter = await PromotersModel.findOneAndUpdate(
+      {
+        $or: [
+          { promoter_id: { $regex: new RegExp(`^${trimmedId}$`, "i") } },
+          { username: trimmedId },
+          { email: { $regex: new RegExp(`^${trimmedId}$`, "i") } },
+        ],
+      },
+      { $set: updateFields },
+      { new: true }
+    );
+
+    if (!updatedPromoter) {
+      return res.status(404).json({ success: false, message: "Promoter not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      promoter: updatedPromoter,
+    });
+  } catch (error) {
+    console.error("Error in updatePromoterProfile:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = {
+  getPromoters,
+  getPromotersEarnings,
+  getPromotersTransactions,
+  updatePromoterStatus,
+  getPromoterUserStats,
+  getUsersByPromoter,
+  getAllPromotersAllData,
+  addPromoter,
+  getPromoterSentInterests,
+  getPromoterReceivedInterests,
+  getPromoterUserImageVerification,
+  updatePromoterUserImageVerification,
+  getPromoterDashboardData,
+  updatePromoterProfile,
+};

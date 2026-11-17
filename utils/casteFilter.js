@@ -1,5 +1,5 @@
 const getCasteFilter = (req) => {
-  const project = req.headers['x-project'];
+  const project = req?.headers ? req.headers['x-project'] : undefined;
   console.log("Project Header:", project);
 
   if (project === 'sangamsathi') {

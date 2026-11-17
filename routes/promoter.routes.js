@@ -3,8 +3,18 @@ const router = express.Router();
 const PromotersModel = require('../models/promoters/Promoters');
 const authenticateToken = require('../middleware/auth.middleware');
 const checkRole = require('../middleware/roles.middleware');
-const { getUsersByPromoter, getPromoterSentInterests, getPromoterReceivedInterests, getPromoterUserImageVerification, updatePromoterUserImageVerification } = require('../controllers/promoters/PromotersController');
+const { getUsersByPromoter, getPromoterSentInterests, getPromoterReceivedInterests, getPromoterUserImageVerification, updatePromoterUserImageVerification, addPromoter, getPromoterDashboardData, updatePromoterProfile } = require('../controllers/promoters/PromotersController');
 const { searchUsersByInput } = require('../controllers/profileController');
+
+// Public route to register new promoter
+router.post('/register', addPromoter);
+
+// Get real dashboard stats and promoter profile
+router.get('/dashboard/:promoter_id', authenticateToken, checkRole("promoter"), getPromoterDashboardData);
+router.get('/profile/:promoter_id', authenticateToken, checkRole("promoter"), getPromoterDashboardData);
+
+// Update promoter profile
+router.put('/profile/:promoter_id', authenticateToken, checkRole("promoter"), updatePromoterProfile);
 
 // Get all users referred by the logged-in promoter
 router.get('/my-users/:promoter_id', authenticateToken, checkRole("promoter"), getUsersByPromoter);
