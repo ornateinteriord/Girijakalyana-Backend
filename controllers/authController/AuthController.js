@@ -216,7 +216,13 @@ const login = async (req, res) => {
     }
 
     const user = await UserModel.findOne({ username });
-    const promoter = await PromotersModel.findOne({ username });
+    const promoter = await PromotersModel.findOne({
+      $or: [
+        { username: username },
+        { email: username.toLowerCase() },
+        { promoter_id: username.toUpperCase() }
+      ]
+    });
 
     const authUser = user || promoter;
     const userType = user ? "user" : "promoter";
@@ -224,7 +230,7 @@ const login = async (req, res) => {
     if (!authUser) {
       return res.status(400).json({
         success: false,
-        message: "Invalid username or password",
+        message: "User not found. Please check your username or register.",
       });
     }
 
@@ -233,17 +239,22 @@ const login = async (req, res) => {
     if (!isPasswordValid) {
       return res.status(400).json({
         success: false,
-        message: "Invalid username or password",
+        message: "Incorrect password. Please try again.",
       });
     }
 
-    // Check if user account is active
-    if (user && user.status !== "active") {
-      const isPending = user.status === "Pending" || user.status === "pending" || user.status === "inactive";
-      return res.status(403).json({
+    // Check if account is active
+    const targetStatus = user ? user.status : (promoter ? promoter.status : "active");
+    if (targetStatus && targetStatus.toLowerCase() !== "active") {
+      const isPending =
+        targetStatus.toLowerCase() === "pending" ||
+        targetStatus.toLowerCase() === "inactive";
+      return res.status(400).json({
         success: false,
-        message: isPending ? "Member under pending approval by admin." : "Your account is not yet activated. Please wait for admin approval.",
-        accountStatus: user.status
+        message: isPending
+          ? "Member under pending approval by admin."
+          : "Your account is not yet activated. Please wait for admin approval.",
+        accountStatus: targetStatus,
       });
     }
 
